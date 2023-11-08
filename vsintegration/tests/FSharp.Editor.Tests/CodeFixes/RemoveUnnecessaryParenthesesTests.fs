@@ -12,7 +12,6 @@ open CodeFixTestFramework
 [<AutoOpen>]
 module private TopLevel =
     let private fixer = FSharpRemoveUnnecessaryParenthesesCodeFixProvider()
-    let private fixAllProvider = fixer.RegisterFsharpFixAll()
 
     let private tryFix (code: string) =
         cancellableTask {
@@ -1041,62 +1040,62 @@ let _ =
         let moreComplexApps =
             memberData {
                 "
-type T() = member _.M y = [|y|]
-let x = T()
-let y = 3
-let z = 0
-x.M(y)[z]
-",
+                type T() = member _.M y = [|y|]
+                let x = T()
+                let y = 3
+                let z = 0
+                x.M(y)[z]
+                ",
                 "
-type T() = member _.M y = [|y|]
-let x = T()
-let y = 3
-let z = 0
-x.M(y)[z]
-"
+                type T() = member _.M y = [|y|]
+                let x = T()
+                let y = 3
+                let z = 0
+                x.M(y)[z]
+                "
 
                 "
-type T() = member _.M y = [|y|]
-let x = T()
-let y = 3
-let z = 0
-x.M(y).[z]
-",
+                type T() = member _.M y = [|y|]
+                let x = T()
+                let y = 3
+                let z = 0
+                x.M(y).[z]
+                ",
                 "
-type T() = member _.M y = [|y|]
-let x = T()
-let y = 3
-let z = 0
-x.M(y).[z]
-"
+                type T() = member _.M y = [|y|]
+                let x = T()
+                let y = 3
+                let z = 0
+                x.M(y).[z]
+                "
 
                 "
-let f x = x =
-            (let a = 1
-             a)
-",
+                let f x = x =
+                            (let a = 1
+                             a)
+                ",
+                                "
+                let f x = x =
+                            (let a = 1
+                             a)
                 "
-let f x = x =
-            (let a = 1
-             a)
-"
 
                 "
-type Builder () =
-    member _.Return x = x
-    member _.Run x = x
-let builder = Builder ()
-let (+) _ _ = builder
-let _ = (2 + 2) { return 5 }
-",
+                type Builder () =
+                    member _.Return x = x
+                    member _.Run x = x
+                let builder = Builder ()
+                let (+) _ _ = builder
+                let _ = (2 + 2) { return 5 }
+                ",
                 "
-type Builder () =
-    member _.Return x = x
-    member _.Run x = x
-let builder = Builder ()
-let (+) _ _ = builder
-let _ = (2 + 2) { return 5 }
-"
+                type Builder () =
+                    member _.Return x = x
+                    member _.Run x = x
+                let builder = Builder ()
+                let (+) _ _ = builder
+                let _ = (2 + 2) { return 5 }
+                "
 
                 """
                 type E (message : string) =
