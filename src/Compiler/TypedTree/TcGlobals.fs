@@ -821,7 +821,7 @@ type TcGlobals(
   let v_array3D_set_info           = makeIntrinsicValRef(fslib_MFIntrinsicFunctions_nleref,                    "SetArray3D"                           , None                 , None          , [vara],     ([[mkArrayType 3 varaTy];[v_int_ty]; [v_int_ty]; [v_int_ty]; [varaTy]], v_unit_ty))
   let v_array4D_set_info           = makeIntrinsicValRef(fslib_MFIntrinsicFunctions_nleref,                    "SetArray4D"                           , None                 , None          , [vara],     ([[mkArrayType 4 varaTy];[v_int_ty]; [v_int_ty]; [v_int_ty]; [v_int_ty]; [varaTy]], v_unit_ty))
 
-  let v_list_init_info            = makeIntrinsicValRef(fslib_MFListModule_nleref,                             "init"                                 , None                 , Some "Initialize", [vara],  ([[v_int32_ty]; [v_int32_ty --> varaTy]], mkListTy varaTy))
+  let v_list_init_info             = makeIntrinsicValRef(fslib_MFListModule_nleref,                            "init"                                 , None                 , Some "Initialize", [vara],  ([[v_int32_ty]; [v_int32_ty --> varaTy]], mkListTy varaTy))
 
   let v_option_toNullable_info     = makeIntrinsicValRef(fslib_MFOptionModule_nleref,                          "toNullable"                           , None                 , Some "ToNullable" , [vara],     ([[mkOptionTy varaTy]], mkNullableTy varaTy))
   let v_option_defaultValue_info   = makeIntrinsicValRef(fslib_MFOptionModule_nleref,                          "defaultValue"                         , None                 , Some "DefaultValue" , [vara],     ([[varaTy]; [mkOptionTy varaTy]], varaTy))
