@@ -255,101 +255,319 @@ let (|SeqToArray|_|) g expr =
     | ValApp g g.seq_to_array_vref (_, [seqExpr], m) -> ValueSome (seqExpr, m)
     | _ -> ValueNone
 
+module Const =
+    /// Constant 0.
+    [<return: Struct>]
+    let (|Zero|_|) expr =
+        match expr with
+        | Const.Int32 0
+        | Const.Int64 0L
+        | Const.UInt64 0UL
+        | Const.UInt32 0u
+        | Const.IntPtr 0L
+        | Const.UIntPtr 0UL
+        | Const.Int16 0s
+        | Const.UInt16 0us
+        | Const.SByte 0y
+        | Const.Byte 0uy
+        | Const.Char '\000' -> ValueSome Zero
+        | _ -> ValueNone
+
+    /// Constant 1.
+    [<return: Struct>]
+    let (|One|_|) expr =
+        match expr with
+        | Const.Int32 1
+        | Const.Int64 1L
+        | Const.UInt64 1UL
+        | Const.UInt32 1u
+        | Const.IntPtr 1L
+        | Const.UIntPtr 1UL
+        | Const.Int16 1s
+        | Const.UInt16 1us
+        | Const.SByte 1y
+        | Const.Byte 1uy
+        | Const.Char '\001' -> ValueSome One
+        | _ -> ValueNone
+
+    /// Positive constant.
+    [<return: Struct>]
+    let (|Positive|_|) expr =
+        match expr with
+        | Const.Int32 v when v > 0 -> ValueSome Positive
+        | Const.Int64 v when v > 0L -> ValueSome Positive
+        | Const.IntPtr v when v > 0L -> ValueSome Positive
+        | Const.Int16 v when v > 0s -> ValueSome Positive
+        | Const.SByte v when v > 0y -> ValueSome Positive
+        | Const.UInt64 v when v > 0UL -> ValueSome Positive
+        | Const.UInt32 v when v > 0u -> ValueSome Positive
+        | Const.UIntPtr v when v > 0UL -> ValueSome Positive
+        | Const.UInt16 v when v > 0us -> ValueSome Positive
+        | Const.Byte v when v > 0uy -> ValueSome Positive
+        | Const.Char v when v > '\000' -> ValueSome Positive
+        | _ -> ValueNone
+
 /// start..finish
+/// start..step..finish
 [<return: Struct>]
-let (|Int32Range|_|) g expr =
+let (|IntegralRange|_|) g expr =
     match expr with
-    | ValApp g g.range_int32_op_vref ([], [start; Expr.Const (value = Const.Int32 1); finish], _) -> ValueSome (start, finish)
+    | ValApp g g.range_int32_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_int64_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_uint64_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_uint32_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_nativeint_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_unativeint_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_int16_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_uint16_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_sbyte_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_byte_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | ValApp g g.range_char_op_vref ([], [start; step; finish], _) -> ValueSome (start, step, finish)
+    | _ -> ValueNone
+
+/// 5..1
+/// 1..-5
+/// 1..-1..5
+/// 5..2..1
+[<return: Struct>]
+let (|EmptyRange|_|) (start, step, finish) =
+    match start, step, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) when finish < start && step > 0 || finish > start && step < 0 -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) when finish < start && step > 0L || finish > start && step < 0L -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 _), Expr.Const (value = Const.UInt64 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 _), Expr.Const (value = Const.UInt32 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) when finish < start && step > 0L || finish > start && step < 0L -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr _), Expr.Const (value = Const.UIntPtr finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) when finish < start && step > 0s || finish > start && step < 0s -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 _), Expr.Const (value = Const.UInt16 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) when finish < start && step > 0y || finish > start && step < 0y -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte _), Expr.Const (value = Const.Byte finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char step), Expr.Const (value = Const.Char finish) when finish < start && step > '\000' || finish > start && step < '\000' -> ValueSome EmptyRange
+    | _ -> ValueNone
+
+/// 1..5 → (5 - 1) / 1 + 1 → 5
+/// 1..2..5 → (5 - 1) / 2 + 1 → 3
+/// -1..-2..-5 → (-5 - -1) / -2 + 1 → 3
+[<return: Struct>]
+let (|ConstCount|_|) (start, step, finish) =
+    match start, step, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) -> ValueSome (Const.Int32 ((finish - start) / step + 1))
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) -> ValueSome (Const.Int64  ((finish - start) / step + 1L))
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 step), Expr.Const (value = Const.UInt64 finish) -> ValueSome (Const.UInt64 ((finish - start) / step + 1UL))
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 step), Expr.Const (value = Const.UInt32 finish) -> ValueSome (Const.UInt32 ((finish - start) / step + 1u))
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) -> ValueSome (Const.IntPtr ((finish - start) / step + 1L))
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr step), Expr.Const (value = Const.UIntPtr finish) -> ValueSome (Const.UIntPtr ((finish - start) / step + 1UL))
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) -> ValueSome (Const.Int16 ((finish - start) / step + 1s))
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 step), Expr.Const (value = Const.UInt16 finish) -> ValueSome (Const.UInt16 ((finish - start) / step + 1us))
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) -> ValueSome (Const.SByte ((finish - start) / step + 1y))
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte step), Expr.Const (value = Const.Byte finish) -> ValueSome (Const.Byte ((finish - start) / step + 1uy))
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char step), Expr.Const (value = Const.Char finish) -> ValueSome (Const.Char (char (uint16 (finish - start) / uint16 step) + '\001'))
     | _ -> ValueNone
 
 let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
     // If ListCollector is in FSharp.Core then this optimization kicks in
     if g.ListCollector_tcr.CanDeref then
+        /// Make a call to invalidArg when step is 0.
+        let mkCallInvalidArgStepCannotBeZero m overallSeqExprTy =
+            mkCallInvalidArg
+                g
+                m
+                overallSeqExprTy
+                (Expr.Const (Const.String "step", Text.Range.range0, g.string_ty))
+                (Expr.Const (Const.String (SR.GetString "stepCannotBeZero"), Text.Range.range0, g.string_ty))
+
         /// Make an expression holding the count/length
         /// to initialize the collection with.
-        let mkCount start finish =
-            let diff = mkAsmExpr ([AI_sub], [], [finish; start], [g.int32_ty], Text.Range.range0)
-            mkAsmExpr ([AI_add], [], [diff; mkOne g Text.Range.range0], [g.int32_ty], Text.Range.range0)
+        let mkCount ty start step finish =
+            match step with
+            | Expr.Const (value = Const.One) ->
+                let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], Text.Range.range0)
+                mkAsmExpr ([AI_add], [], [diff; step], [ty], Text.Range.range0)
+            | _notOne ->
+                let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], Text.Range.range0)
+                let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], Text.Range.range0)
+                mkAsmExpr ([AI_add], [], [quotient; step], [ty], Text.Range.range0)
 
         /// Make a lambda expression to pass into
         /// the Array.init/List.init call.
-        let mkInitializer start =
-            let v, e = mkCompGenLocal Text.Range.range0 "i" g.int32_ty
-            let body = mkAsmExpr ([AI_add], [], [start; e], [g.int32_ty], Text.Range.range0)
-            mkLambda Text.Range.range0 v (body, g.int32_ty)
+        let mkInitializer ty start step =
+            match step with
+            | Expr.Const (value = Const.One) ->
+                let v, e = mkCompGenLocal Text.Range.range0 "i" g.int32_ty
+                let body = mkAsmExpr ([AI_add], [], [start; e], [ty], Text.Range.range0)
+                mkLambda Text.Range.range0 v (body, ty)
+            | _notOne ->
+                let v, e = mkCompGenLocal Text.Range.range0 "i" g.int32_ty
+                let mulByStep = mkAsmExpr ([AI_mul], [], [e; step], [ty], Text.Range.range0)
+                let body = mkAsmExpr ([AI_add], [], [mulByStep; start], [ty], Text.Range.range0)
+                mkLambda Text.Range.range0 v (body, ty)
 
         /// Make an expression that initializes a list
         /// with the values from start through finish.
-        let mkListInit m start finish =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                m
-                (mkListTy g g.int32_ty)
-                (mkILAsmClt g Text.Range.range0 finish start)
-                (mkNil g Text.Range.range0 g.int32_ty)
-                (mkCallListInit g Text.Range.range0 g.int32_ty (mkCount start finish) (mkInitializer start))
+        let mkListInit m ty start step finish =
+            match step with
+            // [start..finish] → if finish < start then [] else List.init (finish - start + 1) ((+) start)
+            // [start..2..finish] → if finish < start then [] else List.init ((finish - start) / 2 + 1) ((*) 2 >> (+) start)
+            | Expr.Const (value = Const.Positive) ->
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    (mkListTy g ty)
+                    (mkILAsmClt g Text.Range.range0 finish start)
+                    (mkNil g Text.Range.range0 ty)
+                    (mkCallListInit g Text.Range.range0 ty (mkCount ty start step finish) (mkInitializer ty start step))
+
+            // [start..-2..finish] → if start < finish then [] else List.init ((finish - start) / -2 + 1) ((*) -2 >> (+) start)
+            | Expr.Const (value = _negative) ->
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    (mkListTy g ty)
+                    (mkILAsmClt g Text.Range.range0 start finish)
+                    (mkNil g Text.Range.range0 ty)
+                    (mkCallListInit g Text.Range.range0 ty (mkCount ty start step finish) (mkInitializer ty start step))
+
+            // [start..step..finish] → let count = (finish - start) / step + 1 in if count = 0 then [] else List.init count ((*) step >> (+) start)
+            | _notConst ->
+                let listTy = mkListTy g ty
+                let count = mkCount ty start step finish
+
+                let init =
+                    mkCompGenLetIn Text.Range.range0 (nameof count) ty count (fun (_, count) ->
+                        mkCond
+                            DebugPointAtBinding.NoneAtInvisible
+                            m
+                            listTy
+                            (mkILAsmCeq g Text.Range.range0 count (mkZero g Text.Range.range0))
+                            (mkNil g Text.Range.range0 ty)
+                            (mkCallListInit g Text.Range.range0 ty count (mkInitializer ty start step)))
+
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    listTy
+                    (mkILAsmCeq g Text.Range.range0 step (mkZero g Text.Range.range0))
+                    (mkCallInvalidArgStepCannotBeZero m listTy)
+                    init
 
         /// Make an expression that initializes an array
         /// with the values from start through finish.
-        let mkArrayInit m start finish =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                m
-                (mkArrayType g g.int32_ty)
-                (mkILAsmClt g Text.Range.range0 finish start)
-                (mkArray (g.int32_ty, [], Text.Range.range0))
-                (mkCallArrayInit g Text.Range.range0 g.int32_ty (mkCount start finish) (mkInitializer start))
+        let mkArrayInit m ty start step finish =
+            match step with
+            // [|start..finish|] → if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
+            // [|start..2..finish|] → if finish < start then [||] else Array.init ((finish - start) / 2 + 1) ((*) 2 >> (+) start)
+            | Expr.Const (value = Const.Positive) ->
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    (mkArrayType g ty)
+                    (mkILAsmClt g Text.Range.range0 finish start)
+                    (mkArray (ty, [], Text.Range.range0))
+                    (mkCallArrayInit g Text.Range.range0 ty (mkCount ty start step finish) (mkInitializer ty start step))
+
+            // [|start..-2..finish|] → if start < finish then [||] else Array.init ((finish - start) / -2 + 1) ((*) -2 >> (+) start)
+            | Expr.Const (value = _negative) ->
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    (mkArrayType g ty)
+                    (mkILAsmClt g Text.Range.range0 start finish)
+                    (mkArray (ty, [], Text.Range.range0))
+                    (mkCallArrayInit g Text.Range.range0 ty (mkCount ty start step finish) (mkInitializer ty start step))
+
+            // [|start..step..finish|] → let count = (finish - start) / step + 1 in if count = 0 then [||] else Array.init count ((*) step >> (+) start)
+            | _notConst ->
+                let arrayTy = mkArrayType g  ty
+                let count = mkCount ty start step finish
+
+                let init =
+                    mkCompGenLetIn Text.Range.range0 (nameof count) ty count (fun (_, count) ->
+                        mkCond
+                            DebugPointAtBinding.NoneAtInvisible
+                            m
+                            arrayTy
+                            (mkILAsmCeq g Text.Range.range0 count (mkZero g Text.Range.range0))
+                            (mkArray (ty, [], Text.Range.range0))
+                            (mkCallArrayInit g Text.Range.range0 ty count (mkInitializer ty start step)))
+
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    m
+                    arrayTy
+                    (mkILAsmCeq g Text.Range.range0 step (mkZero g Text.Range.range0))
+                    (mkCallInvalidArgStepCannotBeZero m arrayTy)
+                    init
+
+        /// Bind start, step, and finish exprs to local variables if needed.
+        ///
+        /// E.g.:
+        ///
+        ///     [start..finishExpr] →
+        ///         let finish = finishExpr in
+        ///         if finish < start then [] else List.init (finish - start + 1) ((+) start)
+        ///
+        ///     [startExpr..finish] →
+        ///         let start = startExpr in
+        ///         if finish < start then [] else List.init (finish - start + 1) ((+) start)
+        let mkLetBindingsIfNeeded ty start step finish mkInitExpr =
+            match start, step, finish with
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                mkInitExpr ty start step finish
+
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn Text.Range.range0 (nameof finish) ty finish (fun (_, finish) ->
+                    mkInitExpr ty start step finish)
+
+            | _, (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn Text.Range.range0 (nameof start) ty start (fun (_, start) ->
+                    mkInitExpr ty start step finish)
+
+            | (Expr.Const _ | Expr.Val _), _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn Text.Range.range0 (nameof step) ty step (fun (_, step) ->
+                    mkInitExpr ty start step finish)
+
+            | _, (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn Text.Range.range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn Text.Range.range0 (nameof finish) ty finish (fun (_, finish) ->
+                        mkInitExpr ty start step finish))
+
+            | (Expr.Const _ | Expr.Val _), _, _ ->
+                mkCompGenLetIn Text.Range.range0 (nameof step) ty step (fun (_, step) ->
+                    mkCompGenLetIn Text.Range.range0 (nameof finish) ty finish (fun (_, finish) ->
+                        mkInitExpr ty start step finish))
+
+            | _, _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn Text.Range.range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn Text.Range.range0 (nameof step) ty step (fun (_, step) ->
+                        mkInitExpr ty start step finish))
+
+            | _, _, _ ->
+                mkCompGenLetIn Text.Range.range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn Text.Range.range0 (nameof step) ty step (fun (_, step) ->
+                        mkCompGenLetIn Text.Range.range0 (nameof finish) ty finish (fun (_, finish) ->
+                            mkInitExpr ty start step finish)))
 
         match overallExpr with
         // […]
         | SeqToList g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
             match overallSeqExpr with
+            // [start..0..finish]
+            | IntegralRange g (_, Expr.Const (value = Const.Zero), _) ->
+                Some (mkCallInvalidArgStepCannotBeZero m (tyOfExpr g overallSeqExpr))
+
             // [5..1] → []
-            | Int32Range g (Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 finish)) when
-                finish < start
-                ->
-                Some (mkUnionCaseExpr (g.nil_ucref, [g.int32_ty], [], m))
+            | IntegralRange g EmptyRange ->
+                Some (mkNil g m overallElemTy)
 
             // [1..5] → List.init 5 ((+) 5)
-            | Int32Range g (start & Expr.Const (value = Const.Int32 startVal), Expr.Const (value = Const.Int32 finishVal))
+            | IntegralRange g ((start, step, _) & ConstCount count)
                 ->
-                Some (mkCallListInit g Text.Range.range0 g.int32_ty (Expr.Const (Const.Int32 (finishVal - startVal + 1), Text.Range.range0, g.int32_ty)) (mkInitializer start))
+                Some (mkCallListInit g Text.Range.range0 overallElemTy (Expr.Const (count, Text.Range.range0, overallElemTy)) (mkInitializer overallElemTy start step))
 
             // [start..finish] → if finish < start then [] else List.init (finish - start + 1) ((+) start)
-            | Int32Range g (start & (Expr.Const _ | Expr.Val _), finish & (Expr.Const _ | Expr.Val _)) ->
-                Some (mkListInit m start finish)
-
-            // [start..finishExpr] →
-            //     let finish = finishExpr
-            //     if finish < start then [] else List.init (finish - start + 1) ((+) start)
-            | Int32Range g (start & (Expr.Const _ | Expr.Val _), finish) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof finish) g.int32_ty finish (fun (_, finish) ->
-                        mkListInit m start finish)
-
-                Some expr
-
-            // [startExpr..finish] →
-            //     let start = startExpr
-            //     if finish < start then [] else List.init (finish - start + 1) ((+) start)
-            | Int32Range g (start, finish & (Expr.Const _ | Expr.Val _)) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof start) g.int32_ty start (fun (_, start) ->
-                        mkListInit m start finish)
-
-                Some expr
-
-            // [startExpr..finishExpr] →
-            //     let start = startExpr
-            //     let finish = finishExpr
-            //     if finish < start then [] else List.init (finish - start + 1) ((+) start)
-            | Int32Range g (start, finish) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof start) g.int32_ty start (fun (_, start) ->
-                        mkCompGenLetIn Text.Range.range0 (nameof finish) g.int32_ty finish (fun (_, finish) ->
-                            mkListInit m start finish))
-
-                Some expr
+            // [start..step..finish] → let count = (finish - start) / step + 1 in if count = 0 then [] else List.init count ((*) step >> (+) start)
+            | IntegralRange g (start, step, finish) ->
+                Some (mkLetBindingsIfNeeded overallElemTy start step finish (mkListInit m))
 
             // [(* Anything more complex. *)]
             | _ ->
@@ -359,52 +577,23 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
         // [|…|]
         | SeqToArray g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
             match overallSeqExpr with
+            // [|start..0..finish|]
+            | IntegralRange g (_, Expr.Const (value = Const.Zero), _) ->
+                Some (mkCallInvalidArgStepCannotBeZero m (tyOfExpr g overallSeqExpr))
+
             // [|5..1|] → [||]
-            | Int32Range g (Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 finish)) when
-                finish < start
-                ->
-                Some (mkArray (g.int32_ty, [], m))
+            | IntegralRange g EmptyRange ->
+                Some (mkArray (overallElemTy, [], m))
 
             // [|1..5|] → Array.init 5 ((+) 5)
-            | Int32Range g (start & Expr.Const (value = Const.Int32 startVal), Expr.Const (value = Const.Int32 finishVal))
+            | IntegralRange g ((start, step, _) & ConstCount count)
                 ->
-                Some (mkCallArrayInit g Text.Range.range0 g.int32_ty (Expr.Const (Const.Int32 (finishVal - startVal + 1), Text.Range.range0, g.int32_ty)) (mkInitializer start))
+                Some (mkCallArrayInit g Text.Range.range0 overallElemTy (Expr.Const (count, Text.Range.range0, overallElemTy)) (mkInitializer overallElemTy start step))
 
             // [|start..finish|] → if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
-            | Int32Range g (start & (Expr.Const _ | Expr.Val _), finish & (Expr.Const _ | Expr.Val _)) ->
-                Some (mkArrayInit m start finish)
-
-            // [|start..finishExpr|] →
-            //     let finish = finishExpr
-            //     if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
-            | Int32Range g (start & (Expr.Const _ | Expr.Val _), finish) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof finish) g.int32_ty finish (fun (_, finish) ->
-                        mkArrayInit m start finish)
-
-                Some expr
-
-            // [|startExpr..finish|] →
-            //     let start = startExpr
-            //     if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
-            | Int32Range g (start, finish & (Expr.Const _ | Expr.Val _)) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof start) g.int32_ty start (fun (_, start) ->
-                        mkArrayInit m start finish)
-
-                Some expr
-
-            // [|startExpr..finishExpr|] →
-            //     let start = startExpr
-            //     let finish = finishExpr
-            //     if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
-            | Int32Range g (start, finish) ->
-                let expr =
-                    mkCompGenLetIn Text.Range.range0 (nameof start) g.int32_ty start (fun (_, start) ->
-                        mkCompGenLetIn Text.Range.range0 (nameof finish) g.int32_ty finish (fun (_, finish) ->
-                            mkArrayInit m start finish))
-
-                Some expr
+            // [|start..step..finish|] → let count = (finish - start) / step + 1 in if count = 0 then [||] else Array.init count ((*) step >> (+) start)
+            | IntegralRange g (start, step, finish) ->
+                Some (mkLetBindingsIfNeeded overallElemTy start step finish (mkArrayInit m))
 
             // [|(* Anything more complex. *)|]
             | _ ->

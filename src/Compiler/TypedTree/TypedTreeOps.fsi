@@ -2035,6 +2035,8 @@ val mkCallArray4DSet: TcGlobals -> range -> TType -> Expr -> Expr -> Expr -> Exp
 
 val mkCallListInit: TcGlobals -> range -> TType -> Expr -> Expr -> Expr
 
+val mkCallInvalidArg: TcGlobals -> range -> TType -> Expr -> Expr -> Expr
+
 val mkCallHash: TcGlobals -> range -> TType -> Expr -> Expr
 
 val mkCallBox: TcGlobals -> range -> TType -> Expr -> Expr

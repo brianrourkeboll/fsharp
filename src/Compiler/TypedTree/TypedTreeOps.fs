@@ -7757,6 +7757,8 @@ let mkCallArray4DSet (g: TcGlobals) m ty e1 idx1 idx2 idx3 idx4 v = mkApps g (ty
 
 let mkCallListInit (g: TcGlobals) m ty e1 e2 = mkApps g (typedExprForIntrinsic g m g.list_init_info, [[ty]], [e1; e2], m)
 
+let mkCallInvalidArg (g: TcGlobals) m ty e1 e2 = mkApps g (typedExprForIntrinsic g m g.invalid_arg_info, [[ty]], [e1; e2], m)
+
 let mkCallHash (g: TcGlobals) m ty e1 = mkApps g (typedExprForIntrinsic g m g.hash_info, [[ty]], [ e1 ], m)
 
 let mkCallBox (g: TcGlobals) m ty e1 = mkApps g (typedExprForIntrinsic g m g.box_info, [[ty]], [ e1 ], m)
