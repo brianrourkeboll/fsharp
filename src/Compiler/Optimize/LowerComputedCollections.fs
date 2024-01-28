@@ -255,57 +255,57 @@ let (|SeqToArray|_|) g expr =
     | ValApp g g.seq_to_array_vref (_, [seqExpr], m) -> ValueSome (seqExpr, m)
     | _ -> ValueNone
 
-module Const =
-    /// Constant 0.
-    [<return: Struct>]
-    let (|Zero|_|) expr =
-        match expr with
-        | Const.Int32 0
-        | Const.Int64 0L
-        | Const.UInt64 0UL
-        | Const.UInt32 0u
-        | Const.IntPtr 0L
-        | Const.UIntPtr 0UL
-        | Const.Int16 0s
-        | Const.UInt16 0us
-        | Const.SByte 0y
-        | Const.Byte 0uy
-        | Const.Char '\000' -> ValueSome Zero
-        | _ -> ValueNone
+/// Constant 0.
+[<return: Struct>]
+let (|Zero|_|) expr =
+    match expr with
+    | Const.Zero
+    | Const.Int32 0
+    | Const.Int64 0L
+    | Const.UInt64 0UL
+    | Const.UInt32 0u
+    | Const.IntPtr 0L
+    | Const.UIntPtr 0UL
+    | Const.Int16 0s
+    | Const.UInt16 0us
+    | Const.SByte 0y
+    | Const.Byte 0uy
+    | Const.Char '\000' -> ValueSome Zero
+    | _ -> ValueNone
 
-    /// Constant 1.
-    [<return: Struct>]
-    let (|One|_|) expr =
-        match expr with
-        | Const.Int32 1
-        | Const.Int64 1L
-        | Const.UInt64 1UL
-        | Const.UInt32 1u
-        | Const.IntPtr 1L
-        | Const.UIntPtr 1UL
-        | Const.Int16 1s
-        | Const.UInt16 1us
-        | Const.SByte 1y
-        | Const.Byte 1uy
-        | Const.Char '\001' -> ValueSome One
-        | _ -> ValueNone
+/// Constant 1.
+[<return: Struct>]
+let (|One|_|) expr =
+    match expr with
+    | Const.Int32 1
+    | Const.Int64 1L
+    | Const.UInt64 1UL
+    | Const.UInt32 1u
+    | Const.IntPtr 1L
+    | Const.UIntPtr 1UL
+    | Const.Int16 1s
+    | Const.UInt16 1us
+    | Const.SByte 1y
+    | Const.Byte 1uy
+    | Const.Char '\001' -> ValueSome One
+    | _ -> ValueNone
 
-    /// Positive constant.
-    [<return: Struct>]
-    let (|Positive|_|) expr =
-        match expr with
-        | Const.Int32 v when v > 0 -> ValueSome Positive
-        | Const.Int64 v when v > 0L -> ValueSome Positive
-        | Const.IntPtr v when v > 0L -> ValueSome Positive
-        | Const.Int16 v when v > 0s -> ValueSome Positive
-        | Const.SByte v when v > 0y -> ValueSome Positive
-        | Const.UInt64 v when v > 0UL -> ValueSome Positive
-        | Const.UInt32 v when v > 0u -> ValueSome Positive
-        | Const.UIntPtr v when v > 0UL -> ValueSome Positive
-        | Const.UInt16 v when v > 0us -> ValueSome Positive
-        | Const.Byte v when v > 0uy -> ValueSome Positive
-        | Const.Char v when v > '\000' -> ValueSome Positive
-        | _ -> ValueNone
+/// Positive constant.
+[<return: Struct>]
+let (|Positive|_|) expr =
+    match expr with
+    | Const.Int32 v when v > 0 -> ValueSome Positive
+    | Const.Int64 v when v > 0L -> ValueSome Positive
+    | Const.IntPtr v when v > 0L -> ValueSome Positive
+    | Const.Int16 v when v > 0s -> ValueSome Positive
+    | Const.SByte v when v > 0y -> ValueSome Positive
+    | Const.UInt64 v when v > 0UL -> ValueSome Positive
+    | Const.UInt32 v when v > 0u -> ValueSome Positive
+    | Const.UIntPtr v when v > 0UL -> ValueSome Positive
+    | Const.UInt16 v when v > 0us -> ValueSome Positive
+    | Const.Byte v when v > 0uy -> ValueSome Positive
+    | Const.Char v when v > '\000' -> ValueSome Positive
+    | _ -> ValueNone
 
 /// start..finish
 /// start..step..finish
@@ -368,21 +368,22 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
     // If ListCollector is in FSharp.Core then this optimization kicks in
     if g.ListCollector_tcr.CanDeref then
         /// Make a call to invalidArg when step is 0.
-        let mkCallInvalidArgStepCannotBeZero m overallSeqExprTy =
+        let mkCallInvalidArgStepCannotBeZero m retTy =
             mkCallInvalidArg
                 g
                 m
-                overallSeqExprTy
+                retTy
                 (Expr.Const (Const.String "step", Text.Range.range0, g.string_ty))
-                (Expr.Const (Const.String (SR.GetString "stepCannotBeZero"), Text.Range.range0, g.string_ty))
+                (Expr.Const (Const.String "The step of a range cannot be zero.", Text.Range.range0, g.string_ty))
 
         /// Make an expression holding the count/length
         /// to initialize the collection with.
         let mkCount ty start step finish =
             match step with
-            | Expr.Const (value = Const.One) ->
+            | Expr.Const (value = One) ->
                 let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], Text.Range.range0)
                 mkAsmExpr ([AI_add], [], [diff; step], [ty], Text.Range.range0)
+
             | _notOne ->
                 let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], Text.Range.range0)
                 let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], Text.Range.range0)
@@ -392,10 +393,11 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
         /// the Array.init/List.init call.
         let mkInitializer ty start step =
             match step with
-            | Expr.Const (value = Const.One) ->
+            | Expr.Const (value = One) ->
                 let v, e = mkCompGenLocal Text.Range.range0 "i" g.int32_ty
                 let body = mkAsmExpr ([AI_add], [], [start; e], [ty], Text.Range.range0)
                 mkLambda Text.Range.range0 v (body, ty)
+
             | _notOne ->
                 let v, e = mkCompGenLocal Text.Range.range0 "i" g.int32_ty
                 let mulByStep = mkAsmExpr ([AI_mul], [], [e; step], [ty], Text.Range.range0)
@@ -408,7 +410,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             match step with
             // [start..finish] → if finish < start then [] else List.init (finish - start + 1) ((+) start)
             // [start..2..finish] → if finish < start then [] else List.init ((finish - start) / 2 + 1) ((*) 2 >> (+) start)
-            | Expr.Const (value = Const.Positive) ->
+            | Expr.Const (value = Positive) ->
                 mkCond
                     DebugPointAtBinding.NoneAtInvisible
                     m
@@ -456,7 +458,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             match step with
             // [|start..finish|] → if finish < start then [||] else Array.init (finish - start + 1) ((+) start)
             // [|start..2..finish|] → if finish < start then [||] else Array.init ((finish - start) / 2 + 1) ((*) 2 >> (+) start)
-            | Expr.Const (value = Const.Positive) ->
+            | Expr.Const (value = Positive) ->
                 mkCond
                     DebugPointAtBinding.NoneAtInvisible
                     m
@@ -552,8 +554,8 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
         | SeqToList g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
             match overallSeqExpr with
             // [start..0..finish]
-            | IntegralRange g (_, Expr.Const (value = Const.Zero), _) ->
-                Some (mkCallInvalidArgStepCannotBeZero m (tyOfExpr g overallSeqExpr))
+            | IntegralRange g (_, Expr.Const (value = Zero), _) ->
+                Some (mkCallInvalidArgStepCannotBeZero m (mkListTy g overallElemTy))
 
             // [5..1] → []
             | IntegralRange g EmptyRange ->
@@ -578,8 +580,8 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
         | SeqToArray g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
             match overallSeqExpr with
             // [|start..0..finish|]
-            | IntegralRange g (_, Expr.Const (value = Const.Zero), _) ->
-                Some (mkCallInvalidArgStepCannotBeZero m (tyOfExpr g overallSeqExpr))
+            | IntegralRange g (_, Expr.Const (value = Zero), _) ->
+                Some (mkCallInvalidArgStepCannotBeZero m (mkArrayType g overallElemTy))
 
             // [|5..1|] → [||]
             | IntegralRange g EmptyRange ->
