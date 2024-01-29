@@ -47,53 +47,123 @@
          extends [runtime]System.Object
   {
     .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 07 00 00 00 00 00 ) 
+    .class auto ansi serializable sealed nested assembly beforefieldinit t1@1
+           extends class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,uint8>
+    {
+      .field static assembly initonly class assembly/CompareMicroPerfAndCodeGenerationTests/t1@1 @_instance
+      .method assembly specialname rtspecialname 
+              instance void  .ctor() cil managed
+      {
+        .custom instance void [runtime]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor() = ( 01 00 00 00 ) 
+        .custom instance void [runtime]System.Diagnostics.DebuggerNonUserCodeAttribute::.ctor() = ( 01 00 00 00 ) 
+        
+        .maxstack  8
+        IL_0000:  ldarg.0
+        IL_0001:  call       instance void class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,uint8>::.ctor()
+        IL_0006:  ret
+      } 
+
+      .method public strict virtual instance uint8 
+              Invoke(int32 i) cil managed
+      {
+        
+        .maxstack  8
+        IL_0000:  ldc.i4.0
+        IL_0001:  ldarg.1
+        IL_0002:  add
+        IL_0003:  ret
+      } 
+
+      .method private specialname rtspecialname static 
+              void  .cctor() cil managed
+      {
+        
+        .maxstack  10
+        IL_0000:  newobj     instance void assembly/CompareMicroPerfAndCodeGenerationTests/t1@1::.ctor()
+        IL_0005:  stsfld     class assembly/CompareMicroPerfAndCodeGenerationTests/t1@1 assembly/CompareMicroPerfAndCodeGenerationTests/t1@1::@_instance
+        IL_000a:  ret
+      } 
+
+    } 
+
+    .class auto ansi serializable sealed nested assembly beforefieldinit t2@1
+           extends class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,uint8>
+    {
+      .field static assembly initonly class assembly/CompareMicroPerfAndCodeGenerationTests/t2@1 @_instance
+      .method assembly specialname rtspecialname 
+              instance void  .ctor() cil managed
+      {
+        .custom instance void [runtime]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor() = ( 01 00 00 00 ) 
+        .custom instance void [runtime]System.Diagnostics.DebuggerNonUserCodeAttribute::.ctor() = ( 01 00 00 00 ) 
+        
+        .maxstack  8
+        IL_0000:  ldarg.0
+        IL_0001:  call       instance void class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,uint8>::.ctor()
+        IL_0006:  ret
+      } 
+
+      .method public strict virtual instance uint8 
+              Invoke(int32 i) cil managed
+      {
+        
+        .maxstack  8
+        IL_0000:  ldc.i4.0
+        IL_0001:  ldarg.1
+        IL_0002:  add
+        IL_0003:  ret
+      } 
+
+      .method private specialname rtspecialname static 
+              void  .cctor() cil managed
+      {
+        
+        .maxstack  10
+        IL_0000:  newobj     instance void assembly/CompareMicroPerfAndCodeGenerationTests/t2@1::.ctor()
+        IL_0005:  stsfld     class assembly/CompareMicroPerfAndCodeGenerationTests/t2@1 assembly/CompareMicroPerfAndCodeGenerationTests/t2@1::@_instance
+        IL_000a:  ret
+      } 
+
+    } 
+
     .method public static int32  f7() cil managed
     {
       
-      .maxstack  5
+      .maxstack  4
       .locals init (int32 V_0,
                uint8[] V_1,
                uint8[] V_2,
                int32 V_3)
       IL_0000:  ldc.i4.1
       IL_0001:  stloc.0
-      IL_0002:  ldc.i4.0
-      IL_0003:  ldc.i4.1
-      IL_0004:  ldc.i4.s   100
-      IL_0006:  call       class [runtime]System.Collections.Generic.IEnumerable`1<uint8> [FSharp.Core]Microsoft.FSharp.Core.Operators/OperatorIntrinsics::RangeByte(uint8,
-                                                                                                                                                                            uint8,
-                                                                                                                                                                            uint8)
-      IL_000b:  call       class [runtime]System.Collections.Generic.IEnumerable`1<!!0> [FSharp.Core]Microsoft.FSharp.Core.Operators::CreateSequence<uint8>(class [runtime]System.Collections.Generic.IEnumerable`1<!!0>)
-      IL_0010:  call       !!0[] [FSharp.Core]Microsoft.FSharp.Collections.SeqModule::ToArray<uint8>(class [runtime]System.Collections.Generic.IEnumerable`1<!!0>)
-      IL_0015:  stloc.1
-      IL_0016:  ldc.i4.0
-      IL_0017:  ldc.i4.1
-      IL_0018:  ldc.i4.s   100
-      IL_001a:  call       class [runtime]System.Collections.Generic.IEnumerable`1<uint8> [FSharp.Core]Microsoft.FSharp.Core.Operators/OperatorIntrinsics::RangeByte(uint8,
-                                                                                                                                                                            uint8,
-                                                                                                                                                                            uint8)
-      IL_001f:  call       class [runtime]System.Collections.Generic.IEnumerable`1<!!0> [FSharp.Core]Microsoft.FSharp.Core.Operators::CreateSequence<uint8>(class [runtime]System.Collections.Generic.IEnumerable`1<!!0>)
-      IL_0024:  call       !!0[] [FSharp.Core]Microsoft.FSharp.Collections.SeqModule::ToArray<uint8>(class [runtime]System.Collections.Generic.IEnumerable`1<!!0>)
-      IL_0029:  stloc.2
-      IL_002a:  ldc.i4.0
-      IL_002b:  stloc.3
-      IL_002c:  br.s       IL_003a
+      IL_0002:  ldc.i4.s   101
+      IL_0004:  ldsfld     class assembly/CompareMicroPerfAndCodeGenerationTests/t1@1 assembly/CompareMicroPerfAndCodeGenerationTests/t1@1::@_instance
+      IL_0009:  call       !!0[] [FSharp.Core]Microsoft.FSharp.Collections.ArrayModule::Initialize<uint8>(int32,
+                                                                                                          class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,!!0>)
+      IL_000e:  stloc.1
+      IL_000f:  ldc.i4.s   101
+      IL_0011:  ldsfld     class assembly/CompareMicroPerfAndCodeGenerationTests/t2@1 assembly/CompareMicroPerfAndCodeGenerationTests/t2@1::@_instance
+      IL_0016:  call       !!0[] [FSharp.Core]Microsoft.FSharp.Collections.ArrayModule::Initialize<uint8>(int32,
+                                                                                                          class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<int32,!!0>)
+      IL_001b:  stloc.2
+      IL_001c:  ldc.i4.0
+      IL_001d:  stloc.3
+      IL_001e:  br.s       IL_002c
 
-      IL_002e:  ldloc.1
-      IL_002f:  ldloc.2
-      IL_0030:  call       int32 [FSharp.Core]Microsoft.FSharp.Core.LanguagePrimitives/HashCompare::GenericComparisonIntrinsic<uint8[]>(!!0,
+      IL_0020:  ldloc.1
+      IL_0021:  ldloc.2
+      IL_0022:  call       int32 [FSharp.Core]Microsoft.FSharp.Core.LanguagePrimitives/HashCompare::GenericComparisonIntrinsic<uint8[]>(!!0,
                                                                                                                                         !!0)
-      IL_0035:  stloc.0
-      IL_0036:  ldloc.3
-      IL_0037:  ldc.i4.1
-      IL_0038:  add
-      IL_0039:  stloc.3
-      IL_003a:  ldloc.3
-      IL_003b:  ldc.i4     0x989681
-      IL_0040:  blt.s      IL_002e
+      IL_0027:  stloc.0
+      IL_0028:  ldloc.3
+      IL_0029:  ldc.i4.1
+      IL_002a:  add
+      IL_002b:  stloc.3
+      IL_002c:  ldloc.3
+      IL_002d:  ldc.i4     0x989681
+      IL_0032:  blt.s      IL_0020
 
-      IL_0042:  ldloc.0
-      IL_0043:  ret
+      IL_0034:  ldloc.0
+      IL_0035:  ret
     } 
 
   } 
