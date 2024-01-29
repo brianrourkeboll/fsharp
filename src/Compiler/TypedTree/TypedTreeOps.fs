@@ -9219,8 +9219,49 @@ let mkChoiceTy (g: TcGlobals) m tinst =
      | 1 -> List.head tinst
      | length -> mkAppTy (mkChoiceTyconRef g m length) tinst
 
-let mkChoiceCaseRef g m n i = 
-     mkUnionCaseRef (mkChoiceTyconRef g m n) ("Choice"+string (i+1)+"Of"+string n)
+let mkChoiceCaseRef g m n i =
+    let name =
+        match n, i with
+        | 2, 0 -> nameof Choice1Of2
+        | 2, 1 -> nameof Choice2Of2
+
+        | 3, 0 -> nameof Choice1Of3
+        | 3, 1 -> nameof Choice2Of3
+        | 3, 2 -> nameof Choice3Of3
+
+        | 4, 0 -> nameof Choice1Of4
+        | 4, 1 -> nameof Choice2Of4
+        | 4, 2 -> nameof Choice3Of4
+        | 4, 3 -> nameof Choice4Of4
+
+        | 5, 0 -> nameof Choice1Of5
+        | 5, 1 -> nameof Choice2Of5
+        | 5, 2 -> nameof Choice3Of5
+        | 5, 3 -> nameof Choice4Of5
+        | 5, 4 -> nameof Choice5Of5
+
+        | 6, 0 -> nameof Choice1Of6
+        | 6, 1 -> nameof Choice2Of6
+        | 6, 2 -> nameof Choice3Of6
+        | 6, 3 -> nameof Choice4Of6
+        | 6, 4 -> nameof Choice5Of6
+        | 6, 5 -> nameof Choice6Of6
+
+        | 7, 0 -> nameof Choice1Of7
+        | 7, 1 -> nameof Choice2Of7
+        | 7, 2 -> nameof Choice3Of7
+        | 7, 3 -> nameof Choice4Of7
+        | 7, 4 -> nameof Choice5Of7
+        | 7, 5 -> nameof Choice6Of7
+        | 7, 6 -> nameof Choice7Of7
+
+        | _ ->
+            if n > 7 then
+                error(Error(FSComp.SR.tastActivePatternsLimitedToSeven(), m))
+            else
+                error(InternalError($"Unrecognized Choice case: {i + 1} of {n}.", m))
+
+    mkUnionCaseRef (mkChoiceTyconRef g m n) name
 
 type ActivePatternInfo with 
 
