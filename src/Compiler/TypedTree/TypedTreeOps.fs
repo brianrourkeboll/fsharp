@@ -5123,7 +5123,7 @@ and accFreeInDecisionTree opts x (acc: FreeVars) =
     | TDSwitch(e1, csl, dflt, _) -> accFreeInExpr opts e1 (accFreeInSwitchCases opts csl dflt acc)
     | TDSuccess (es, _) -> accFreeInFlatExprs opts es acc
     | TDBind (bind, body) -> unionFreeVars (bindLhs opts bind (accBindRhs opts bind (freeInDecisionTree opts body))) acc
-  
+
 and accFreeInValFlags opts flag acc =
     let isMethLocal = 
         match flag with 
@@ -5170,7 +5170,7 @@ and accFreeRecdFieldRef opts rfref fvs =
         let fvs = fvs |> accUsedRecdOrUnionTyconRepr opts rfref.Tycon
         let fvs = fvs |> accFreevarsInTycon opts rfref.TyconRef 
         { fvs with FreeRecdFields = Zset.add rfref fvs.FreeRecdFields } 
-  
+
 and accFreeExnRef _exnc fvs = fvs // Note: this exnc (TyconRef) should be collected the surround types, e.g. tinst of Expr.Op 
 and accFreeValRef opts (vref: ValRef) fvs = 
     match vref.IsLocalRef with 
@@ -10092,6 +10092,310 @@ let (|CompiledInt32RangeForEachExpr|_|) g expr =
         Some (startExpr, step, finishExpr, elemVar, bodyExpr, ranges)
     | _ -> None
 
+let (|ValApp|_|) g vref expr =
+    match expr with
+    | Expr.App (Expr.Val (vref2, _, _), _f0ty, tyargs, args, m) when valRefEq g vref vref2 ->  Some (tyargs, args, m)
+    | _ -> None
+
+[<RequireQualifiedAccess>]
+module IntegralConst =
+    /// Constant 0.
+    [<return: Struct>]
+    let (|Zero|_|) expr =
+        match expr with
+        | Const.Zero
+        | Const.Int32 0
+        | Const.Int64 0L
+        | Const.UInt64 0UL
+        | Const.UInt32 0u
+        | Const.IntPtr 0L
+        | Const.UIntPtr 0UL
+        | Const.Int16 0s
+        | Const.UInt16 0us
+        | Const.SByte 0y
+        | Const.Byte 0uy
+        | Const.Char '\000' -> ValueSome Zero
+        | _ -> ValueNone
+
+    /// Positive constant.
+    [<return: Struct>]
+    let (|Positive|_|) expr =
+        match expr with
+        | Const.Int32 v when v > 0 -> ValueSome Positive
+        | Const.Int64 v when v > 0L -> ValueSome Positive
+        | Const.IntPtr v when v > 0L -> ValueSome Positive
+        | Const.Int16 v when v > 0s -> ValueSome Positive
+        | Const.SByte v when v > 0y -> ValueSome Positive
+        | Const.UInt64 v when v > 0UL -> ValueSome Positive
+        | Const.UInt32 v when v > 0u -> ValueSome Positive
+        | Const.UIntPtr v when v > 0UL -> ValueSome Positive
+        | Const.UInt16 v when v > 0us -> ValueSome Positive
+        | Const.Byte v when v > 0uy -> ValueSome Positive
+        | Const.Char v when v > '\000' -> ValueSome Positive
+        | _ -> ValueNone
+
+/// start..finish
+/// start..step..finish
+[<return: Struct>]
+let (|IntegralRange|_|) g expr =
+    match expr with
+    | ValApp g g.range_int32_op_vref ([], [start; step; finish], _) -> ValueSome (g.int32_ty, (start, step, finish))
+    | ValApp g g.range_int64_op_vref ([], [start; step; finish], _) -> ValueSome (g.int64_ty, (start, step, finish))
+    | ValApp g g.range_uint64_op_vref ([], [start; step; finish], _) -> ValueSome (g.uint64_ty, (start, step, finish))
+    | ValApp g g.range_uint32_op_vref ([], [start; step; finish], _) -> ValueSome (g.uint32_ty, (start, step, finish))
+    | ValApp g g.range_nativeint_op_vref ([], [start; step; finish], _) -> ValueSome (g.nativeint_ty, (start, step, finish))
+    | ValApp g g.range_unativeint_op_vref ([], [start; step; finish], _) -> ValueSome (g.unativeint_ty, (start, step, finish))
+    | ValApp g g.range_int16_op_vref ([], [start; step; finish], _) -> ValueSome (g.int16_ty, (start, step, finish))
+    | ValApp g g.range_uint16_op_vref ([], [start; step; finish], _) -> ValueSome (g.uint16_ty, (start, step, finish))
+    | ValApp g g.range_sbyte_op_vref ([], [start; step; finish], _) -> ValueSome (g.sbyte_ty, (start, step, finish))
+    | ValApp g g.range_byte_op_vref ([], [start; step; finish], _) -> ValueSome (g.byte_ty, (start, step, finish))
+    | ValApp g g.range_char_op_vref ([], [start; step; finish], _) -> ValueSome (g.char_ty, (start, step, finish))
+    | _ -> ValueNone
+
+/// 5..1
+/// 1..-5
+/// 1..-1..5
+/// -5..-1..-1
+/// 5..2..1
+[<return: Struct>]
+let (|EmptyRange|_|) (start, step, finish) =
+    match start, step, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) when finish < start && step > 0 || finish > start && step < 0 -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) when finish < start && step > 0L || finish > start && step < 0L -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 _), Expr.Const (value = Const.UInt64 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 _), Expr.Const (value = Const.UInt32 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) when finish < start && step > 0L || finish > start && step < 0L -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr _), Expr.Const (value = Const.UIntPtr finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) when finish < start && step > 0s || finish > start && step < 0s -> ValueSome EmptyRange
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 _), Expr.Const (value = Const.UInt16 finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) when finish < start && step > 0y || finish > start && step < 0y -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte _), Expr.Const (value = Const.Byte finish) when finish < start -> ValueSome EmptyRange
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char _), Expr.Const (value = Const.Char finish) when finish < start -> ValueSome EmptyRange
+    | _ -> ValueNone
+
+/// 1..5 → start <= finish && step > 0 → FSharpForLoopUp
+/// 1..2..5 → start <= finish && step > 0 → FSharpForLoopUp
+/// 1..-2..-5 → finish < start && step < 0 → FSharpForLoopDown
+[<return: Struct>]
+let (|ConstRange|_|) (start, step, finish) =
+    let inline upOrDown start step finish =
+        assert (step <> LanguagePrimitives.GenericZero)
+        assert (start <= finish && step > LanguagePrimitives.GenericZero || finish < start && step < LanguagePrimitives.GenericZero)
+
+        if start <= finish && step > LanguagePrimitives.GenericZero then
+            FSharpForLoopUp
+        else
+            FSharpForLoopDown
+
+    match start, step, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 step), Expr.Const (value = Const.UInt64 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 step), Expr.Const (value = Const.UInt32 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr step), Expr.Const (value = Const.UIntPtr finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 step), Expr.Const (value = Const.UInt16 finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte step), Expr.Const (value = Const.Byte finish) -> ValueSome (upOrDown start step finish)
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char step), Expr.Const (value = Const.Char finish) -> ValueSome (upOrDown start step finish)
+    | _ -> ValueNone
+
+/// If the start and finish are constant,
+/// we can generate a simpler runtime check to determine
+/// whether the range is empty.
+///
+/// 1..step..5
+[<return: Struct>]
+let (|ConstStartAndFinish|_|) (start, _step, finish) =
+    match start, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
+    | _ -> ValueNone
+
+let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWhile) (start, step, finish) body =
+    // The zero range.
+    let range0 = Text.Range.range0
+
+    let mkNecessaryLetBindingsFor f =
+        // We always need to bind start to a mutable local variable.
+        let startVal, startLocal = mkMutableCompGenLocal mIn (nameof start) rangeTy
+        mkLet spFor mIn startVal start (
+            let start = startLocal
+            match step, finish with
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                f (startVal, start) step finish
+
+            | (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn range0 (nameof finish) rangeTy finish (fun (_, finish) ->
+                    f (startVal, start) step finish)
+
+            | _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn range0 (nameof step) rangeTy step (fun (_, step) ->
+                    f (startVal, start) step finish)
+
+            | _, _ ->
+                mkCompGenLetIn range0 (nameof step) rangeTy step (fun (_, step) ->
+                    mkCompGenLetIn range0 (nameof finish) rangeTy finish (fun (_, finish) ->
+                        f (startVal, start) step finish))
+        )
+
+    /// while start <= finish do …
+    let mkUp (startVal, start) step finish =
+        let guard = mkAsmExpr ([AI_or], [], [mkILAsmClt g mFor start finish; mkILAsmCeq g mFor start finish], [g.int32_ty], mFor) 
+        let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+        mkWhile
+            g
+            (
+                spInWhile,
+                WhileLoopForCompiledForEachExprMarker,
+                guard,
+                mkCompGenSequential mIn body incr,
+                mBody
+            )
+
+    /// while finish <= start do …
+    let mkDown (startVal, start) step finish =
+        let guard = mkAsmExpr ([AI_or], [], [mkILAsmClt g mFor finish start; mkILAsmCeq g mFor finish start], [g.int32_ty], mFor) 
+        let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+        mkWhile
+            g
+            (
+                spInWhile,
+                WhileLoopForCompiledForEachExprMarker,
+                guard,
+                mkCompGenSequential mIn body incr,
+                mBody
+            )
+
+    /// This will raise an exception at runtime if step is zero.
+    let callAndIgnoreRangeExpr = mkAsmExpr ([AI_pop], [], [rangeExpr], [g.unit_ty], mBody)
+
+    /// Emits logic to handle arbitrary start, step, and finish values at runtime.
+    let mkIntegralWhileLoop (startVal, start) step finish =
+        match start, step, finish with
+        // Dynamic start and/or finish, but positive constant step.
+        //
+        // step > 0:
+        //     if finish < start then   ()
+        //     else                     <up>
+        | _, Expr.Const (value = IntegralConst.Positive), _ ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                range0
+                g.unit_ty
+                (mkILAsmClt g range0 finish start)
+                (mkUnit g mBody)
+                (mkUp (startVal, start) step finish)
+
+        // Dynamic start and/or finish, but negative constant step.
+        //
+        // step < 0:
+        //     if start < finish then   ()
+        //     else                     <down>
+        | _, Expr.Const (value = _negative), _ ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                range0
+                g.unit_ty
+                (mkILAsmClt g range0 start finish)
+                (mkUnit g range0)
+                (mkDown (startVal, start) step finish)
+
+        // Dynamic step, but constant start and finish.
+        //
+        // start <= finish:
+        //     if step = 0 then     <stepCannotBeZero>
+        //     elif step < 0 then   ()
+        //     else                 <up>
+        | ConstStartAndFinish FSharpForLoopUp ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                range0
+                g.unit_ty
+                (mkILAsmCeq g range0 step (mkZero g range0))
+                callAndIgnoreRangeExpr
+                (
+                    mkCond
+                        DebugPointAtBinding.NoneAtInvisible
+                        range0
+                        g.unit_ty
+                        (mkILAsmClt g range0 step (mkZero g range0))
+                        (mkUnit g range0)
+                        (mkUp (startVal, start) step finish)
+                )
+
+        // Dynamic step, but constant start and finish.
+        //
+        // finish < start:
+        //     if step = 0 then     <stepCannotBeZero>
+        //     elif 0 < step then   ()
+        //     else                 <down>
+        | ConstStartAndFinish FSharpForLoopDown ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                range0
+                g.unit_ty
+                (mkILAsmCeq g range0 step (mkZero g range0))
+                callAndIgnoreRangeExpr
+                (
+                    mkCond
+                        DebugPointAtBinding.NoneAtInvisible
+                        range0
+                        g.unit_ty
+                        (mkILAsmClt g range0 (mkZero g range0) step)
+                        (mkUnit g range0)
+                        (mkDown (startVal, start) step finish)
+                )
+
+        // Any other combination of dynamic exprs.
+        //
+        //     if step = 0 then     <stepCannotBeZero>
+        //     elif 0 < step then   <up>
+        //     else (* step < 0 *)  <down>
+        | _ ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                range0
+                g.unit_ty
+                (mkILAsmCeq g range0 step (mkZero g range0))
+                callAndIgnoreRangeExpr
+                (
+                    mkCond
+                        DebugPointAtBinding.NoneAtInvisible
+                        range0
+                        g.unit_ty
+                        (mkILAsmClt g range0 (mkZero g range0) step)
+                        (mkUp (startVal, start) step finish)
+                        (mkDown (startVal, start) step finish)
+                )
+
+    match start, step, finish with
+    // for … in start..0..finish do …
+    | _, Expr.Const (value = IntegralConst.Zero), _ -> callAndIgnoreRangeExpr
+
+    // for … in 5..1 do …
+    // for … in 1..-1..2 do …
+    | EmptyRange -> mkUnit g mBody
+
+    // for … in 1..5 do …
+    // for … in 1..2..5 do …
+    | ConstRange FSharpForLoopUp -> mkNecessaryLetBindingsFor mkUp
+
+    // for … in 5..-1..1 do …
+    | ConstRange FSharpForLoopDown -> mkNecessaryLetBindingsFor mkDown
+
+    // for … in start..step..finish do …
+    | _, _, _ -> mkNecessaryLetBindingsFor mkIntegralWhileLoop
 
 let mkDebugPoint m expr = 
     Expr.DebugPoint(DebugPointAtLeafExpr.Yes m, expr)
@@ -10107,6 +10411,16 @@ let DetectAndOptimizeForEachExpression g option expr =
            let _mBody, spFor, spIn, _mFor, _mIn, _spInWhile, mWholeExpr = ranges
            let spFor = match spFor with DebugPointAtBinding.Yes mFor -> DebugPointAtFor.Yes mFor | _ -> DebugPointAtFor.No
            mkFastForLoop g (spFor, spIn, mWholeExpr, elemVar, startExpr, (step = 1), finishExpr, bodyExpr)
+
+    | _, CompiledForEachExpr g (_enumTy, rangeExpr & IntegralRange g (rangeTy, (start, step, finish)), _elemVar, bodyExpr, ranges) ->
+        let mBody, spFor, _spIn, mFor, mIn, spInWhile, _mWhole = ranges
+
+        mkOptimizedRangeLoop
+            g
+            (rangeTy, rangeExpr)
+            (mBody, spFor, mFor, mIn, spInWhile)
+            (start, step, finish)
+            bodyExpr
 
     | OptimizeAllForExpressions, CompiledForEachExpr g (enumerableTy, enumerableExpr, elemVar, bodyExpr, ranges) ->
 
@@ -10200,12 +10514,6 @@ let isThreadOrContextStatic g attrs =
 let mkUnitDelayLambda (g: TcGlobals) m e =
     let uv, _ = mkCompGenLocal m "unitVar" g.unit_ty
     mkLambda m uv (e, tyOfExpr g e) 
-
-
-let (|ValApp|_|) g vref expr =
-    match expr with
-    | Expr.App (Expr.Val (vref2, _, _), _f0ty, tyargs, args, m) when valRefEq g vref vref2 ->  Some (tyargs, args, m)
-    | _ -> None
 
 let (|UseResumableStateMachinesExpr|_|) g expr =
     match expr with

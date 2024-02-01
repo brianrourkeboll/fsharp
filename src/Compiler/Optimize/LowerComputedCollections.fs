@@ -2,7 +2,7 @@
 
 module internal FSharp.Compiler.LowerComputedCollectionExpressions
 
-open Internal.Utilities.Library
+open FSharp.Compiler.AbstractIL.IL
 open FSharp.Compiler.AccessibilityLogic
 open FSharp.Compiler.DiagnosticsLogger
 open FSharp.Compiler.InfoReader
@@ -12,6 +12,7 @@ open FSharp.Compiler.Syntax
 open FSharp.Compiler.TcGlobals
 open FSharp.Compiler.TypeRelations
 open FSharp.Compiler.TypedTree
+open FSharp.Compiler.TypedTreeBasics
 open FSharp.Compiler.TypedTreeOps
 open FSharp.Compiler.TypeHierarchy
 
@@ -230,40 +231,392 @@ let (|OptionalCoerce|) expr =
 
 // Making 'seq' optional means this kicks in for FSharp.Core, see TcArrayOrListComputedExpression
 // which only adds a 'seq' call outside of FSharp.Core
+[<return: Struct>]
 let (|OptionalSeq|_|) g amap expr =
     match expr with
     // use 'seq { ... }' as an indicator
     | Seq g (e, elemTy) -> 
-        Some (e, elemTy)
+        ValueSome (e, elemTy)
     | _ -> 
     // search for the relevant element type
     match tyOfExpr g expr with
     | SeqElemTy g amap expr.Range elemTy ->
-        Some (expr, elemTy)
-    | _ -> None
+        ValueSome (expr, elemTy)
+    | _ -> ValueNone
 
+[<return: Struct>]
 let (|SeqToList|_|) g expr =
     match expr with
-    | ValApp g g.seq_to_list_vref (_, [seqExpr], m) -> Some (seqExpr, m)
-    | _ -> None
+    | ValApp g g.seq_to_list_vref (_, [seqExpr], m) -> ValueSome (seqExpr, m)
+    | _ -> ValueNone
 
+[<return: Struct>]
 let (|SeqToArray|_|) g expr =
     match expr with
-    | ValApp g g.seq_to_array_vref (_, [seqExpr], m) -> Some (seqExpr, m)
-    | _ -> None
+    | ValApp g g.seq_to_array_vref (_, [seqExpr], m) -> ValueSome (seqExpr, m)
+    | _ -> ValueNone
+
+[<RequireQualifiedAccess>]
+module IntegralConst =
+    /// Constant 0.
+    [<return: Struct>]
+    let (|Zero|_|) expr =
+        match expr with
+        | Const.Zero
+        | Const.Int32 0
+        | Const.Int64 0L
+        | Const.UInt64 0UL
+        | Const.UInt32 0u
+        | Const.IntPtr 0L
+        | Const.UIntPtr 0UL
+        | Const.Int16 0s
+        | Const.UInt16 0us
+        | Const.SByte 0y
+        | Const.Byte 0uy
+        | Const.Char '\000' -> ValueSome Zero
+        | _ -> ValueNone
+
+    /// Constant 1.
+    [<return: Struct>]
+    let (|One|_|) expr =
+        match expr with
+        | Const.Int32 1
+        | Const.Int64 1L
+        | Const.UInt64 1UL
+        | Const.UInt32 1u
+        | Const.IntPtr 1L
+        | Const.UIntPtr 1UL
+        | Const.Int16 1s
+        | Const.UInt16 1us
+        | Const.SByte 1y
+        | Const.Byte 1uy
+        | Const.Char '\001' -> ValueSome One
+        | _ -> ValueNone
+
+    /// Constant -1.
+    [<return: Struct>]
+    let (|MinusOne|_|) expr =
+        match expr with
+        | Const.Int32 -1
+        | Const.Int64 -1L
+        | Const.IntPtr -1L
+        | Const.Int16 -1s
+        | Const.SByte -1y -> ValueSome MinusOne
+        | _ -> ValueNone
+
+/// Note: this assumes that an empty range has already been checked for
+/// (otherwise the conversion operations here might overflow).
+[<return: Struct>]
+let (|ConstCount|_|) (start, step, finish) =
+    match start, step, finish with
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) -> ValueSome (Const.Int32 (int ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) -> ValueSome (Const.Int64 (int64 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 step), Expr.Const (value = Const.UInt64 finish) -> ValueSome (Const.UInt64 (uint64 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 step), Expr.Const (value = Const.UInt32 finish) -> ValueSome (Const.UInt32 (uint32 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) -> ValueSome (Const.IntPtr (int64 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr step), Expr.Const (value = Const.UIntPtr finish) -> ValueSome (Const.UIntPtr (uint64 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) -> ValueSome (Const.Int16 (int16 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 step), Expr.Const (value = Const.UInt16 finish) -> ValueSome (Const.UInt16 ((finish - start) / step + 1us))
+    | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) -> ValueSome (Const.SByte ((finish - start) / step + 1y))
+    | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte step), Expr.Const (value = Const.Byte finish) -> ValueSome (Const.Byte ((finish - start) / step + 1uy))
+    | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char step), Expr.Const (value = Const.Char finish) -> ValueSome (Const.Char (char (uint16 (finish - start) / uint16 step) + '\001'))
+    | _ -> ValueNone
 
 let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
     // If ListCollector is in FSharp.Core then this optimization kicks in
     if g.ListCollector_tcr.CanDeref then
+        /// The zero range.
+        let range0 = Text.Range.range0
+
+        /// Make an expression holding the count
+        /// to initialize the collection with.
+        let mkCount ty start step finish =
+            match step with
+            // step = 1:
+            //     finish - start + 1
+            | Expr.Const (value = IntegralConst.One) ->
+                let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], range0)
+                mkAsmExpr ([AI_add], [], [diff; mkOne g range0], [ty], range0)
+
+            // step = -1:
+            //     -(finish - start) + 1
+            | Expr.Const (value = IntegralConst.MinusOne) ->
+                let diff = mkAsmExpr ([AI_neg], [], [mkAsmExpr ([AI_sub], [], [finish; start], [ty], range0)], [ty], range0)
+                mkAsmExpr ([AI_add], [], [diff; mkOne g range0], [ty], range0)
+
+            // Arbitrary step:
+            //     (finish - start) / step + 1
+            | _notConstOne ->
+                let count =
+                    let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], range0)
+                    let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], range0)
+                    mkAsmExpr ([AI_add], [], [quotient; mkOne g range0], [ty], range0)
+
+                // Let the default implementation throw the appropriate localized
+                // exception at runtime if step is zero:
+                //     if step = 0 then toList (range …) else (finish - start) / step + 1
+                //     if step = 0 then toArray (range …) else (finish - start) / step + 1
+                mkCond
+                    DebugPointAtBinding.NoneAtInvisible
+                    range0
+                    ty
+                    (mkILAsmCeq g range0 count (mkZero g range0))
+                    overallExpr
+                    count
+
+        /// Triggers an overflow exception at runtime if count doesn't fit in a native int.
+        let convToNativeIntWithOverflow overallElemTy count =
+            if typeEquiv g overallElemTy g.int64_ty then mkAsmExpr ([AI_conv_ovf DT_I], [], [count], [g.nativeint_ty], range0)
+            elif typeEquiv g overallElemTy g.uint64_ty then mkAsmExpr ([AI_conv_ovf_un DT_I], [], [count], [g.nativeint_ty], range0)
+            else count
+
+        /// Bind start, step, and finish exprs to local variables if needed, e.g.,
+        ///
+        ///     [start..finishExpr] → let finish = finishExpr in …
+        ///
+        ///     [startExpr..finish] → let start = startExpr in …
+        ///
+        ///     [startExpr..finishExpr] → let start = startExpr in let finish = finishExpr in …
+        let mkLetBindingsIfNeeded ty start step finish mkInitExpr =
+            match start, step, finish with
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                mkInitExpr start step finish
+
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn range0 (nameof finish) ty finish (fun (_, finish) ->
+                    mkInitExpr start step finish)
+
+            | _, (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn range0 (nameof start) ty start (fun (_, start) ->
+                    mkInitExpr start step finish)
+
+            | (Expr.Const _ | Expr.Val _), _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn range0 (nameof step) ty step (fun (_, step) ->
+                    mkInitExpr start step finish)
+
+            | _, (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn range0 (nameof finish) ty finish (fun (_, finish) ->
+                        mkInitExpr start step finish))
+
+            | (Expr.Const _ | Expr.Val _), _, _ ->
+                mkCompGenLetIn range0 (nameof step) ty step (fun (_, step) ->
+                    mkCompGenLetIn range0 (nameof finish) ty finish (fun (_, finish) ->
+                        mkInitExpr start step finish))
+
+            | _, _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn range0 (nameof step) ty step (fun (_, step) ->
+                        mkInitExpr start step finish))
+
+            | _, _, _ ->
+                mkCompGenLetIn range0 (nameof start) ty start (fun (_, start) ->
+                    mkCompGenLetIn range0 (nameof step) ty step (fun (_, step) ->
+                        mkCompGenLetIn range0 (nameof finish) ty finish (fun (_, finish) ->
+                            mkInitExpr start step finish)))
+
+        let mkIlTy m ty =
+            if typeEquiv g ty g.int32_ty then g.ilg.typ_Int32
+            elif typeEquiv g ty g.int64_ty then g.ilg.typ_Int64
+            elif typeEquiv g ty g.uint64_ty then g.ilg.typ_UInt64
+            elif typeEquiv g ty g.uint32_ty then g.ilg.typ_UInt32
+            elif typeEquiv g ty g.nativeint_ty then g.ilg.typ_IntPtr
+            elif typeEquiv g ty g.unativeint_ty then g.ilg.typ_UIntPtr
+            elif typeEquiv g ty g.int16_ty then g.ilg.typ_Int16
+            elif typeEquiv g ty g.uint16_ty then g.ilg.typ_UInt16
+            elif typeEquiv g ty g.sbyte_ty then g.ilg.typ_SByte
+            elif typeEquiv g ty g.byte_ty then g.ilg.typ_Byte
+            elif typeEquiv g ty g.char_ty then g.ilg.typ_Char
+            else error(InternalError($"Unrecognized integral type '{ty}'.", m))
 
         match overallExpr with
+        // […]
         | SeqToList g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
-            let collectorTy = g.mk_ListCollector_ty overallElemTy
-            LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
-        
+            match overallSeqExpr with
+            // [start..0..finish] → let the default implementation raise an exception.
+            | IntegralRange g (_, (_, Expr.Const (value = IntegralConst.Zero), _)) ->
+                let collectorTy = g.mk_ListCollector_ty overallElemTy
+                LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
+                
+            // [5..1] → []
+            // [1..-1..5] → []
+            | IntegralRange g (_, EmptyRange) ->
+                Some (mkNil g m overallElemTy)
+
+            // [start..finish]
+            // [start..step..finish]
+            | IntegralRange g (_, (start, step, finish)) ->
+                // expr → expr :: null
+                let mkFreshConsNoTail expr = mkCons g overallElemTy expr (mkNull range0 overallElemTy)
+
+                // cons tail → cons.(::).1 <- tail
+                let mkSetFreshConsTail cons tail = mkUnionCaseFieldSet (cons, g.cons_ucref, [overallElemTy], 1, tail, range0)
+
+                let expr =
+                    mkLetBindingsIfNeeded overallElemTy start step finish (fun start step finish ->
+                        // let mutable list = []
+                        mkCompGenLetIn range0 "list" (mkListTy g overallElemTy) (mkNil g range0 overallElemTy) (fun (listVal, list) ->
+                            // let mutable i = 0
+                            mkCompGenLetIn range0 "i" overallElemTy (mkZero g range0) (fun (iVal, i) ->
+                                // let cons2 = (i + step) :: null
+                                // list.(::).1 <- cons2
+                                // list <- cons2
+                                let setTail =
+                                    let cons2 = mkFreshConsNoTail (mkAsmExpr ([AI_add], [], [i; step], [overallElemTy], range0))
+                                    mkCompGenLetIn range0 (nameof cons2) (mkListTy g overallElemTy) cons2 (fun (_, cons2) ->
+                                        mkSequential
+                                            range0
+                                            // list.(::).1 <- cons2
+                                            (mkSetFreshConsTail list cons2)
+                                            // list <- cons2
+                                            (mkValSet range0 (mkLocalValRef listVal) cons2))
+
+                                // i <- 1 + i
+                                let incr = mkValSet range0 (mkLocalValRef iVal) (mkAsmExpr ([ AI_add ], [], [mkOne g m; i], [overallElemTy], range0))
+
+                                let body = mkSequential range0 setTail incr
+
+                                let loop =
+                                    mkOptimizedRangeLoop
+                                        g
+                                        (overallElemTy, overallExpr)
+                                        (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
+                                        (start, step, finish)
+                                        body
+
+                                // while … do <body> done
+                                // list
+                                mkSequential range0 loop list
+                            )
+                        )
+                    )
+
+                Some expr
+
+            // [(* Anything more complex. *)]
+            | _ ->
+                let collectorTy = g.mk_ListCollector_ty overallElemTy
+                LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
+
+        // [|…|]
         | SeqToArray g (OptionalCoerce (OptionalSeq g amap (overallSeqExpr, overallElemTy)), m) ->
-            let collectorTy = g.mk_ArrayCollector_ty overallElemTy
-            LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
+            match overallSeqExpr with
+            // [|start..0..finish|] → let the default implementation raise an exception.
+            | IntegralRange g (_, (_, Expr.Const (value = IntegralConst.Zero), _)) ->
+                let collectorTy = g.mk_ArrayCollector_ty overallElemTy
+                LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
+
+            // [|5..1|] → [||]
+            // [|1..-1..5|] → [||]
+            | IntegralRange g (_, EmptyRange) ->
+                Some (mkArray (overallElemTy, [], m))
+
+            // [|1..5|]
+            // [|1..2..5|]
+            | IntegralRange g (_, (start, step, finish) & ConstCount count) ->
+                // (# "newarr !0" type ('T) count : 'T array #)
+                let arrayInit =
+                    mkAsmExpr
+                        (
+                            [I_newarr (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)],
+                            [],
+                            [convToNativeIntWithOverflow overallElemTy (Expr.Const (count, range0, overallElemTy))],
+                            [mkArrayType g overallElemTy],
+                            range0
+                        )
+
+                let expr =
+                    mkCompGenLetIn range0 "array" (mkArrayType g overallElemTy) arrayInit (fun (_, array) ->
+                        mkCompGenLetIn range0 "i" g.int32_ty (mkZero g range0) (fun (iVal, i) ->
+                            // array[i] <- start + i
+                            let setArrSubI = mkCallArraySet g range0 overallElemTy array i (mkAsmExpr ([AI_add], [], [start; i], [overallElemTy], range0))
+
+                            // i <- step + i
+                            let incr = mkValSet range0 (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [step; i], [g.int32_ty], range0))
+
+                            let body = mkSequential range0 setArrSubI incr
+
+                            let loop =
+                                mkOptimizedRangeLoop
+                                    g
+                                    (overallElemTy, overallExpr)
+                                    (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
+                                    (start, step, finish)
+                                    body
+
+                            // while … do <body> done
+                            // array
+                            mkSequential range0 loop array
+                        )
+                    )
+
+                Some expr
+
+            // [|start..finish|]
+            // [|start..step..finish|]
+            | IntegralRange g (_, (start, step, finish)) ->
+                let expr =
+                    mkLetBindingsIfNeeded overallElemTy start step finish (fun start step finish ->
+                        mkCompGenLetIn range0 "count" g.int32_ty (mkCount overallElemTy start step finish) (fun (_, count) ->
+                            // count < 1
+                            let countLtOne = mkILAsmClt g range0 count (mkOne g range0)
+
+                            // [||]
+                            let empty = mkArray (overallElemTy, [], range0)
+
+                            // (# "newarr !0" type ('T) count : 'T array #)
+                            let arrayInit =
+                                mkAsmExpr
+                                    (
+                                        [I_newarr (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)],
+                                        [],
+                                        [convToNativeIntWithOverflow overallElemTy count],
+                                        [mkArrayType g overallElemTy],
+                                        range0
+                                    )
+
+                            let initialize =
+                                mkCompGenLetIn range0 "array" (mkArrayType g overallElemTy) arrayInit (fun (_, array) ->
+                                    mkCompGenLetIn range0 "i" g.int32_ty (mkZero g range0) (fun (iVal, i) ->
+                                        // array[i] <- start + i
+                                        let setArrSubI = mkCallArraySet g range0 overallElemTy array i (mkAsmExpr ([AI_add], [], [start; i], [overallElemTy], range0))
+
+                                        // i <- step + i
+                                        let incr = mkValSet range0 (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [step; i], [g.int32_ty], range0))
+
+                                        let body = mkSequential range0 setArrSubI incr
+
+                                        let loop =
+                                            mkOptimizedRangeLoop
+                                                g
+                                                (overallElemTy, overallExpr)
+                                                (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
+                                                (start, step, finish)
+                                                body
+
+                                        // while … do <body> done
+                                        // array
+                                        mkSequential range0 loop array
+                                    )
+                                )
+
+                            // if count < 1 then [||] else <initialize>
+                            mkCond
+                                DebugPointAtBinding.NoneAtInvisible
+                                range0
+                                (mkArrayType g overallElemTy)
+                                countLtOne
+                                empty
+                                initialize
+                        )
+                    )
+
+                Some expr
+
+            // [|(* Anything more complex. *)|]
+            | _ ->
+                let collectorTy = g.mk_ArrayCollector_ty overallElemTy
+                LowerComputedListOrArraySeqExpr tcVal g amap m collectorTy overallSeqExpr
 
         | _ -> None
     else

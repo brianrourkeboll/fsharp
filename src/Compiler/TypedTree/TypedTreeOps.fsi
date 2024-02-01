@@ -2536,6 +2536,31 @@ val (|SpecialEquatableHeadType|_|): TcGlobals -> TType -> TType list option
 
 val (|SpecialNotEquatableHeadType|_|): TcGlobals -> TType -> unit option
 
+/// Matches if the given expression is an application
+/// of an integral range operator and returns the
+/// type, start, step, and finish if so.
+///
+/// start..finish
+///
+/// start..step..finish
+[<return: Struct>]
+val (|IntegralRange|_|): g:TcGlobals -> expr: Expr -> (TType * (Expr * Expr * Expr)) voption
+
+/// Matches if the given start, step, and finish represent
+/// a range that is known to be empty at compile-time.
+[<return: Struct>]
+val (|EmptyRange|_|): start:Expr * step: Expr * finish: Expr -> unit voption
+
+/// Makes an optimized while-loop for the given
+/// integral start, stop, and finish.
+val mkOptimizedRangeLoop:
+    g: TcGlobals ->
+    rangeTy: TType * rangeExpr: Expr ->
+    mBody: range * spFor: DebugPointAtBinding * mFor: range * mIn: range * spInWhile: DebugPointAtWhile ->
+    start: Expr * step: Expr * finish: Expr ->
+    body: Expr ->
+        Expr
+
 type OptimizeForExpressionOptions =
     | OptimizeIntRangesOnly
     | OptimizeAllForExpressions
