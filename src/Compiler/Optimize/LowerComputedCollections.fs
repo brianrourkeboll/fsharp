@@ -347,22 +347,9 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             // Arbitrary step:
             //     (finish - start) / step + 1
             | _notConstOne ->
-                let count =
-                    let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], range0)
-                    let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], range0)
-                    mkAsmExpr ([AI_add], [], [quotient; mkOne g range0], [ty], range0)
-
-                // Let the default implementation throw the appropriate localized
-                // exception at runtime if step is zero:
-                //     if step = 0 then toList (range …) else (finish - start) / step + 1
-                //     if step = 0 then toArray (range …) else (finish - start) / step + 1
-                mkCond
-                    DebugPointAtBinding.NoneAtInvisible
-                    range0
-                    ty
-                    (mkILAsmCeq g range0 count (mkZero g range0))
-                    overallExpr
-                    count
+                let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], range0)
+                let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], range0)
+                mkAsmExpr ([AI_add], [], [quotient; mkOne g range0], [ty], range0)
 
         /// Triggers an overflow exception at runtime if count doesn't fit in a native int.
         let convToNativeIntWithOverflow overallElemTy count =
@@ -479,7 +466,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                 let loop =
                                     mkOptimizedRangeLoop
                                         g
-                                        (overallElemTy, overallExpr)
+                                        (overallElemTy, overallSeqExpr)
                                         (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
                                         (start, step, finish)
                                         body
@@ -539,7 +526,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                             let loop =
                                 mkOptimizedRangeLoop
                                     g
-                                    (overallElemTy, overallExpr)
+                                    (overallElemTy, overallSeqExpr)
                                     (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
                                     (start, step, finish)
                                     body
@@ -555,9 +542,29 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             // [|start..finish|]
             // [|start..step..finish|]
             | IntegralRange g (_, (start, step, finish)) ->
+                /// This will raise an exception at runtime if step is zero.
+                let callAndIgnoreRangeExpr =
+                    mkSequential
+                        range0
+                        (mkAsmExpr ([AI_pop], [], [overallSeqExpr], [g.unit_ty], range0))
+                        (mkZero g range0)
+
                 let expr =
                     mkLetBindingsIfNeeded overallElemTy start step finish (fun start step finish ->
                         mkCompGenLetIn range0 "count" g.int32_ty (mkCount overallElemTy start step finish) (fun (_, count) ->
+                            let throwIfStepIsZero =
+                                // Let the default lowering throw the appropriate localized
+                                // exception at runtime if step is zero:
+                                //     if step = 0 then toList (range …) else (finish - start) / step + 1
+                                //     if step = 0 then toArray (range …) else (finish - start) / step + 1
+                                mkCond
+                                    DebugPointAtBinding.NoneAtInvisible
+                                    range0
+                                    g.int32_ty
+                                    (mkILAsmCeq g range0 count (mkZero g range0))
+                                    callAndIgnoreRangeExpr
+                                    (mkUnit g range0)
+
                             // count < 1
                             let countLtOne = mkILAsmClt g range0 count (mkOne g range0)
 
@@ -589,7 +596,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                         let loop =
                                             mkOptimizedRangeLoop
                                                 g
-                                                (overallElemTy, overallExpr)
+                                                (overallElemTy, overallSeqExpr)
                                                 (m, DebugPointAtBinding.NoneAtInvisible, range0, range0, DebugPointAtWhile.No)
                                                 (start, step, finish)
                                                 body
@@ -607,7 +614,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                 (mkArrayType g overallElemTy)
                                 countLtOne
                                 empty
-                                initialize
+                                (mkSequential range0 throwIfStepIsZero initialize)
                         )
                     )
 
