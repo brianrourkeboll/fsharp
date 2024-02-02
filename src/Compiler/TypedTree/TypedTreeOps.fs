@@ -8319,6 +8319,10 @@ let mkCompGenLetIn m nm ty e f =
     let v, ve = mkCompGenLocal m nm ty
     mkCompGenLet m v e (f (v, ve))
 
+let mkCompGenLetMutableIn m nm ty e f = 
+    let v, ve = mkMutableCompGenLocal m nm ty
+    mkCompGenLet m v e (f (v, ve))
+
 /// Take a node representing a coercion from one function type to another, e.g.
 ///    A -> A * A -> int 
 /// to 
@@ -10223,30 +10227,27 @@ let (|ConstStartAndFinish|_|) (start, _step, finish) =
     | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
     | _ -> ValueNone
 
-let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWhile) (start, step, finish) body =
-    // The zero range.
-    let range0 = Text.Range.range0
-
+let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, mFor, mIn, spInWhile) (start, step, finish) (elemVar: Val, body) =
     let mkNecessaryLetBindingsFor f =
-        // We always need to bind start to a mutable local variable.
-        let startVal, startLocal = mkMutableCompGenLocal mIn (nameof start) rangeTy
-        mkLet spFor mIn startVal start (
+        let startVal = elemVar
+        let startLocal = exprForVal startVal.Range startVal
+        mkSequential mFor (mkValSet startVal.Range (mkLocalValRef startVal) start) (
             let start = startLocal
             match step, finish with
             | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
                 f (startVal, start) step finish
 
             | (Expr.Const _ | Expr.Val _), _ ->
-                mkCompGenLetIn range0 (nameof finish) rangeTy finish (fun (_, finish) ->
+                mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
                     f (startVal, start) step finish)
 
             | _, (Expr.Const _ | Expr.Val _) ->
-                mkCompGenLetIn range0 (nameof step) rangeTy step (fun (_, step) ->
+                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
                     f (startVal, start) step finish)
 
             | _, _ ->
-                mkCompGenLetIn range0 (nameof step) rangeTy step (fun (_, step) ->
-                    mkCompGenLetIn range0 (nameof finish) rangeTy finish (fun (_, finish) ->
+                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
+                    mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
                         f (startVal, start) step finish))
         )
 
@@ -10279,7 +10280,11 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
             )
 
     /// This will raise an exception at runtime if step is zero.
-    let callAndIgnoreRangeExpr = mkAsmExpr ([AI_pop], [], [rangeExpr], [g.unit_ty], mBody)
+    let callAndIgnoreRangeExpr =
+        mkSequential
+            mBody
+            rangeExpr
+            (mkUnit g mIn)
 
     /// Emits logic to handle arbitrary start, step, and finish values at runtime.
     let mkIntegralWhileLoop (startVal, start) step finish =
@@ -10292,10 +10297,10 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
         | _, Expr.Const (value = IntegralConst.Positive), _ ->
             mkCond
                 DebugPointAtBinding.NoneAtInvisible
-                range0
+                mIn
                 g.unit_ty
-                (mkILAsmClt g range0 finish start)
-                (mkUnit g mBody)
+                (mkILAsmClt g mIn finish start)
+                (mkUnit g mIn)
                 (mkUp (startVal, start) step finish)
 
         // Dynamic start and/or finish, but negative constant step.
@@ -10306,10 +10311,10 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
         | _, Expr.Const (value = _negative), _ ->
             mkCond
                 DebugPointAtBinding.NoneAtInvisible
-                range0
+                mIn
                 g.unit_ty
-                (mkILAsmClt g range0 start finish)
-                (mkUnit g range0)
+                (mkILAsmClt g mIn start finish)
+                (mkUnit g mIn)
                 (mkDown (startVal, start) step finish)
 
         // Dynamic step, but constant start and finish.
@@ -10321,17 +10326,17 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
         | ConstStartAndFinish FSharpForLoopUp ->
             mkCond
                 DebugPointAtBinding.NoneAtInvisible
-                range0
+                mIn
                 g.unit_ty
-                (mkILAsmCeq g range0 step (mkZero g range0))
+                (mkILAsmCeq g mIn step (mkZero g mIn))
                 callAndIgnoreRangeExpr
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
-                        range0
+                        mIn
                         g.unit_ty
-                        (mkILAsmClt g range0 step (mkZero g range0))
-                        (mkUnit g range0)
+                        (mkILAsmClt g mIn step (mkZero g mIn))
+                        (mkUnit g mIn)
                         (mkUp (startVal, start) step finish)
                 )
 
@@ -10344,17 +10349,17 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
         | ConstStartAndFinish FSharpForLoopDown ->
             mkCond
                 DebugPointAtBinding.NoneAtInvisible
-                range0
+                mIn
                 g.unit_ty
-                (mkILAsmCeq g range0 step (mkZero g range0))
+                (mkILAsmCeq g mIn step (mkZero g mIn))
                 callAndIgnoreRangeExpr
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
-                        range0
+                        mIn
                         g.unit_ty
-                        (mkILAsmClt g range0 (mkZero g range0) step)
-                        (mkUnit g range0)
+                        (mkILAsmClt g mIn (mkZero g mIn) step)
+                        (mkUnit g mIn)
                         (mkDown (startVal, start) step finish)
                 )
 
@@ -10366,16 +10371,16 @@ let mkOptimizedRangeLoop g (rangeTy, rangeExpr) (mBody, spFor, mFor, mIn, spInWh
         | _ ->
             mkCond
                 DebugPointAtBinding.NoneAtInvisible
-                range0
+                mIn
                 g.unit_ty
-                (mkILAsmCeq g range0 step (mkZero g range0))
+                (mkILAsmCeq g mIn step (mkZero g mIn))
                 callAndIgnoreRangeExpr
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
-                        range0
+                        mIn
                         g.unit_ty
-                        (mkILAsmClt g range0 (mkZero g range0) step)
+                        (mkILAsmClt g mIn (mkZero g mIn) step)
                         (mkUp (startVal, start) step finish)
                         (mkDown (startVal, start) step finish)
                 )
@@ -10413,15 +10418,15 @@ let DetectAndOptimizeForEachExpression g option expr =
            let spFor = match spFor with DebugPointAtBinding.Yes mFor -> DebugPointAtFor.Yes mFor | _ -> DebugPointAtFor.No
            mkFastForLoop g (spFor, spIn, mWholeExpr, elemVar, startExpr, (step = 1), finishExpr, bodyExpr)
 
-    | _, CompiledForEachExpr g (_enumTy, rangeExpr & IntegralRange g (rangeTy, (start, step, finish)), _elemVar, bodyExpr, ranges) ->
-        let mBody, spFor, _spIn, mFor, mIn, spInWhile, _mWhole = ranges
+    | _, CompiledForEachExpr g (_enumTy, rangeExpr & IntegralRange g (rangeTy, (start, step, finish)), elemVar, bodyExpr, ranges) ->
+        let mBody, _spFor, _spIn, mFor, mIn, spInWhile, _mWhole = ranges
 
         mkOptimizedRangeLoop
             g
             (rangeTy, rangeExpr)
-            (mBody, spFor, mFor, mIn, spInWhile)
+            (mBody, mFor, mIn, spInWhile)
             (start, step, finish)
-            bodyExpr
+            (elemVar, bodyExpr)
 
     | OptimizeAllForExpressions, CompiledForEachExpr g (enumerableTy, enumerableExpr, elemVar, bodyExpr, ranges) ->
 

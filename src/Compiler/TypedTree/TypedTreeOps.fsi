@@ -218,6 +218,10 @@ val mkCompGenLet: range -> Val -> Expr -> Expr -> Expr
 /// is returned by the given continuation. Compiler-generated bindings do not give rise to a sequence point in debugging.
 val mkCompGenLetIn: range -> string -> TType -> Expr -> (Val * Expr -> Expr) -> Expr
 
+/// Make a mutable let-expression that locally binds a compiler-generated value to an expression, where the expression
+/// is returned by the given continuation. Compiler-generated bindings do not give rise to a sequence point in debugging.
+val mkCompGenLetMutableIn: range -> string -> TType -> Expr -> (Val * Expr -> Expr) -> Expr
+
 /// Make a let-expression that locally binds a value to an expression in an "invisible" way.
 /// Invisible bindings are not given a sequence point and should not have side effects.
 val mkInvisibleLet: range -> Val -> Expr -> Expr -> Expr
@@ -2556,9 +2560,9 @@ val (|EmptyRange|_|): start:Expr * step: Expr * finish: Expr -> unit voption
 val mkOptimizedRangeLoop:
     g: TcGlobals ->
     rangeTy: TType * rangeExpr: Expr ->
-    mBody: range * spFor: DebugPointAtBinding * mFor: range * mIn: range * spInWhile: DebugPointAtWhile ->
+    mBody: range * mFor: range * mIn: range * spInWhile: DebugPointAtWhile ->
     start: Expr * step: Expr * finish: Expr ->
-    body: Expr ->
+    elemVar: Val * body: Expr ->
         Expr
 
 type OptimizeForExpressionOptions =
