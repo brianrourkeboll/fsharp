@@ -2559,10 +2559,11 @@ val (|EmptyRange|_|): start:Expr * step: Expr * finish: Expr -> unit voption
 /// integral start, stop, and finish.
 val mkOptimizedRangeLoop:
     g: TcGlobals ->
-    rangeTy: TType * rangeExpr: Expr ->
     mBody: range * mFor: range * mIn: range * spInWhile: DebugPointAtWhile ->
+    rangeTy: TType * rangeExpr: Expr ->
     start: Expr * step: Expr * finish: Expr ->
-    elemVar: Val * body: Expr ->
+    loopVarVal: Val * loopVar: Expr ->
+    body: Expr ->
         Expr
 
 type OptimizeForExpressionOptions =

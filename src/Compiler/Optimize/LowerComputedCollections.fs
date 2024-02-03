@@ -457,18 +457,19 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
 
                 let expr =
                     mkCompGenLetMutableIn m "@collector" collectorTy (mkDefault (m, collectorTy)) (fun (_, collector) ->
-                        mkCompGenLetMutableIn m "v" overallElemTy (mkZero g m) (fun (vVal, vExpr) ->
+                        mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
                             let reader = InfoReader (g, amap)
 
-                            let body = mkCallCollectorAdd tcVal g reader m collector vExpr
+                            let body = mkCallCollectorAdd tcVal g reader m collector loopVar
 
                             let loop =
                                 mkOptimizedRangeLoop
                                     g
-                                    (overallElemTy, overallSeqExpr)
                                     (m, m, m, DebugPointAtWhile.No)
+                                    (overallElemTy, overallSeqExpr)
                                     (start, step, finish)
-                                    (vVal, body)
+                                    (loopVarVal, loopVar)
+                                    body
 
                             let close = mkCallCollectorClose tcVal g reader m collector
 
@@ -515,9 +516,9 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                 let expr =
                     mkCompGenLetIn m (nameof array) arrayTy array (fun (_, array) ->
                         mkCompGenLetMutableIn m "i" g.int32_ty (mkZero g m) (fun (iVal, i) ->
-                            mkCompGenLetMutableIn m "v" overallElemTy (mkZero g m) (fun (vVal, v) ->
+                            mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
                                 // array[i] <- v
-                                let setArrSubI = mkCallArraySet g m overallElemTy array i v
+                                let setArrSubI = mkCallArraySet g m overallElemTy array i loopVar
 
                                 // i <- 1 + i
                                 let incrI = mkValSet m (mkLocalValRef iVal) (mkIncr g m i)
@@ -527,10 +528,11 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                 let loop =
                                     mkOptimizedRangeLoop
                                         g
-                                        (overallElemTy, overallSeqExpr)
                                         (m, m, m, DebugPointAtWhile.No)
+                                        (overallElemTy, overallSeqExpr)
                                         (start, step, finish)
-                                        (vVal, body)
+                                        (loopVarVal, loopVar)
+                                        body
 
                                 // while … do <body> done
                                 // array
@@ -569,9 +571,9 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                             let initialize =
                                 mkCompGenLetIn m (nameof array) arrayTy array (fun (_, array) ->
                                     mkCompGenLetMutableIn m "i" g.int32_ty (mkZero g m) (fun (iVal, i) ->
-                                        mkCompGenLetMutableIn m "v" overallElemTy (mkZero g m) (fun (vVal, v) ->
+                                        mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
                                             // array[i] <- v
-                                            let setArrSubI = mkCallArraySet g m overallElemTy array i v
+                                            let setArrSubI = mkCallArraySet g m overallElemTy array i loopVar
 
                                             // i <- 1 + i
                                             let incrI = mkValSet m (mkLocalValRef iVal) (mkIncr g m i)
@@ -581,10 +583,11 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                             let loop =
                                                 mkOptimizedRangeLoop
                                                     g
-                                                    (overallElemTy, overallSeqExpr)
                                                     (m, m, m, DebugPointAtWhile.No)
+                                                    (overallElemTy, overallSeqExpr)
                                                     (start, step, finish)
-                                                    (vVal, body)
+                                                    (loopVarVal, loopVar)
+                                                    body
 
                                             // while … do <body> done
                                             // array
