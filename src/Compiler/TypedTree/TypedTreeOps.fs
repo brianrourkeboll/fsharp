@@ -10227,27 +10227,31 @@ let (|ConstStartAndFinish|_|) (start, _step, finish) =
     | Expr.Const (value = Const.Char start), Expr.Const (value = Const.Char finish) -> if start <= finish then ValueSome FSharpForLoopUp else ValueSome FSharpForLoopDown
     | _ -> ValueNone
 
-let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (start, step, finish) (loopVarVal: Val, loopVar) body =
+let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (start, step, finish) (loopVarVal: Val, loopVar) body =
     let mkNecessaryLetBindingsFor f =
-        mkSequential mFor (mkValSet loopVarVal.Range (mkLocalValRef loopVarVal) start) (
-            let start = loopVar
-            match step, finish with
-            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
-                f (loopVarVal, start) step finish
+        let setLoopVarAndBindRest start =
+            mkSequential mFor (mkValSet loopVarVal.Range (mkLocalValRef loopVarVal) start) (
+                match step, finish with
+                | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                    f (loopVarVal, loopVar) start step finish
 
-            | (Expr.Const _ | Expr.Val _), _ ->
-                mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
-                    f (loopVarVal, start) step finish)
-
-            | _, (Expr.Const _ | Expr.Val _) ->
-                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
-                    f (loopVarVal, start) step finish)
-
-            | _, _ ->
-                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
+                | (Expr.Const _ | Expr.Val _), _ ->
                     mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
-                        f (loopVarVal, start) step finish))
-        )
+                        f (loopVarVal, loopVar) start step finish)
+
+                | _, (Expr.Const _ | Expr.Val _) ->
+                    mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
+                        f (loopVarVal, loopVar) start step finish)
+
+                | _, _ ->
+                    mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
+                        mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
+                            f (loopVarVal, loopVar) start step finish))
+            )
+
+        match start with
+        | Expr.Const _ | Expr.Val _ -> setLoopVarAndBindRest start
+        | _ -> mkCompGenLetIn mFor "originalStart" rangeTy start (fun (_, start) -> setLoopVarAndBindRest start)
 
     let mkSignednessAppropriateClt g m e1 e2 =
         if isSignedIntegerTy g rangeTy then
@@ -10256,9 +10260,28 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
             mkAsmExpr ([AI_clt_un], [], [e1; e2], [g.bool_ty], m)
 
     /// while start <= finish do …
-    let mkUp (startVal, start) step finish =
-        let guard = mkAsmExpr ([AI_or], [], [mkSignednessAppropriateClt g mFor start finish; mkILAsmCeq g mFor start finish], [g.bool_ty], mFor) 
+    let mkUp (startVal, start) originalStart step finish =
+        let origStartLtEqStart =
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                mFor
+                g.bool_ty
+                (mkSignednessAppropriateClt g mFor originalStart start)
+                (mkTrue g mFor)
+                (mkILAsmCeq g mFor originalStart start)
+
+        // if start < finish then originalStart <= start else start = finish
+        let guard =
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                mFor
+                g.bool_ty
+                (mkSignednessAppropriateClt g mFor start finish)
+                origStartLtEqStart
+                (mkILAsmCeq g mFor start finish)
+
         let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+
         mkWhile
             g
             (
@@ -10270,9 +10293,28 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
             )
 
     /// while finish <= start do …
-    let mkDown (startVal, start) step finish =
-        let guard = mkAsmExpr ([AI_or], [], [mkSignednessAppropriateClt g mFor finish start; mkILAsmCeq g mFor finish start], [g.bool_ty], mFor) 
+    let mkDown (startVal, start) originalStart step finish =
+        let startLtEqOrigStart =
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                mFor
+                g.bool_ty
+                (mkSignednessAppropriateClt g mFor start originalStart)
+                (mkTrue g mFor)
+                (mkILAsmCeq g mFor start originalStart)
+
+        // if finish < start then start <= originalStart else finish = start
+        let guard =
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                mFor
+                g.bool_ty
+                (mkSignednessAppropriateClt g mFor finish start)
+                startLtEqOrigStart
+                (mkILAsmCeq g mFor finish start)
+
         let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+
         mkWhile
             g
             (
@@ -10291,8 +10333,8 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
             (mkUnit g mIn)
 
     /// Emits logic to handle arbitrary start, step, and finish values at runtime.
-    let mkIntegralWhileLoop (startVal, start) step finish =
-        match start, step, finish with
+    let mkIntegralWhileLoop (startVal, start) originalStart step finish =
+        match originalStart, step, finish with
         // Dynamic start and/or finish, but positive constant step.
         //
         // step > 0:
@@ -10305,7 +10347,7 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
                 g.unit_ty
                 (mkSignednessAppropriateClt g mIn finish start)
                 (mkUnit g mIn)
-                (mkUp (startVal, start) step finish)
+                (mkUp (startVal, start) originalStart step finish)
 
         // Dynamic start and/or finish, but negative constant step.
         //
@@ -10319,7 +10361,7 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
                 g.unit_ty
                 (mkSignednessAppropriateClt g mIn start finish)
                 (mkUnit g mIn)
-                (mkDown (startVal, start) step finish)
+                (mkDown (startVal, start) originalStart step finish)
 
         // Dynamic step, but constant start and finish.
         //
@@ -10341,7 +10383,7 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn step (mkZero g mIn))
                         (mkUnit g mIn)
-                        (mkUp (startVal, start) step finish)
+                        (mkUp (startVal, start) originalStart step finish)
                 )
 
         // Dynamic step, but constant start and finish.
@@ -10364,7 +10406,7 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn (mkZero g mIn) step)
                         (mkUnit g mIn)
-                        (mkDown (startVal, start) step finish)
+                        (mkDown (startVal, start) originalStart step finish)
                 )
 
         // Any other combination of dynamic exprs.
@@ -10385,8 +10427,8 @@ let mkOptimizedRangeLoop g (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (s
                         mIn
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn (mkZero g mIn) step)
-                        (mkUp (startVal, start) step finish)
-                        (mkDown (startVal, start) step finish)
+                        (mkUp (startVal, start) originalStart step finish)
+                        (mkDown (startVal, start) originalStart step finish)
                 )
 
     match start, step, finish with

@@ -366,7 +366,13 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
 
                 let count =
                     let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], m)
-                    let quotient = mkAsmExpr ([AI_div], [], [diff; step], [ty], m)
+
+                    let quotient =
+                        if isSignedIntegerTy g ty then
+                            mkAsmExpr ([AI_div], [], [diff; step], [ty], m)
+                        else
+                            mkAsmExpr ([AI_div_un], [], [diff; step], [ty], m)
+
                     mkAsmExpr ([AI_add], [], [quotient; mkOne g m], [ty], m)
 
                 mkSequential m throwIfStepIsZero count
@@ -376,6 +382,12 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             if typeEquiv g overallElemTy g.int64_ty then mkAsmExpr ([AI_conv_ovf DT_I], [], [count], [g.nativeint_ty], m)
             elif typeEquiv g overallElemTy g.uint64_ty then mkAsmExpr ([AI_conv_ovf_un DT_I], [], [count], [g.nativeint_ty], m)
             else count
+
+        let mkSignednessAppropriateClt g m ty e1 e2 =
+            if isSignedIntegerTy g ty then
+                mkILAsmClt g m e1 e2
+            else
+                mkAsmExpr ([AI_clt_un], [], [e1; e2], [g.bool_ty], m)
 
         /// Bind start, step, and finish exprs to local variables if needed, e.g.,
         ///
@@ -456,7 +468,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                 let collectorTy = g.mk_ListCollector_ty overallElemTy
 
                 let expr =
-                    mkCompGenLetMutableIn m "@collector" collectorTy (mkDefault (m, collectorTy)) (fun (_, collector) ->
+                    mkCompGenLetMutableIn m "collector" collectorTy (mkDefault (m, collectorTy)) (fun (_, collector) ->
                         mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
                             let reader = InfoReader (g, amap)
 
@@ -517,11 +529,11 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                     mkCompGenLetIn m (nameof array) arrayTy array (fun (_, array) ->
                         mkCompGenLetMutableIn m "i" g.int32_ty (mkZero g m) (fun (iVal, i) ->
                             mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
-                                // array[i] <- v
-                                let setArrSubI = mkCallArraySet g m overallElemTy array i loopVar
+                                // array[i] <- loopVar
+                                let setArrSubI = mkAsmExpr ([I_stelem_any (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)], [], [array; i; loopVar], [], m)
 
-                                // i <- 1 + i
-                                let incrI = mkValSet m (mkLocalValRef iVal) (mkIncr g m i)
+                                // i <- i + 1
+                                let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [overallElemTy], m))
 
                                 let body = mkSequential m setArrSubI incrI
 
@@ -552,7 +564,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                             let arrayTy = mkArrayType g overallElemTy
 
                             // count < 1
-                            let countLtOne = mkILAsmClt g m count (mkOne g m)
+                            let countLtOne = mkSignednessAppropriateClt g m overallElemTy count (mkOne g m)
 
                             // [||]
                             let empty = mkArray (overallElemTy, [], m)
@@ -572,11 +584,11 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                 mkCompGenLetIn m (nameof array) arrayTy array (fun (_, array) ->
                                     mkCompGenLetMutableIn m "i" g.int32_ty (mkZero g m) (fun (iVal, i) ->
                                         mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
-                                            // array[i] <- v
-                                            let setArrSubI = mkCallArraySet g m overallElemTy array i loopVar
+                                            // array[i] <- loopVar
+                                            let setArrSubI = mkAsmExpr ([I_stelem_any (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)], [], [array; i; loopVar], [], m)
 
-                                            // i <- 1 + i
-                                            let incrI = mkValSet m (mkLocalValRef iVal) (mkIncr g m i)
+                                            // i <- i + 1
+                                            let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [overallElemTy], m))
 
                                             let body = mkSequential m setArrSubI incrI
 
