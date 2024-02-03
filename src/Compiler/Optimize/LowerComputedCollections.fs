@@ -341,9 +341,22 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                 let diff = mkAsmExpr ([AI_neg], [], [mkAsmExpr ([AI_sub], [], [finish; start], [ty], m)], [ty], m)
                 mkAsmExpr ([AI_add], [], [diff; mkOne g m], [ty], m)
 
+            // step = <const>:
+            //     (finish - start) / step + 1
+            | Expr.Const (value = _notOneOrMinusOne) ->
+                let diff = mkAsmExpr ([AI_sub], [], [finish; start], [ty], m)
+
+                let quotient =
+                    if isSignedIntegerTy g ty then
+                        mkAsmExpr ([AI_div], [], [diff; step], [ty], m)
+                    else
+                        mkAsmExpr ([AI_div_un], [], [diff; step], [ty], m)
+
+                mkAsmExpr ([AI_add], [], [quotient; mkOne g m], [ty], m)
+
             // Arbitrary step:
             //     (finish - start) / step + 1
-            | _notConstOne ->
+            | _notConst ->
                 /// This will raise an exception at runtime if step is zero.
                 let callAndIgnoreRangeExpr =
                     mkSequential
@@ -353,7 +366,6 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
 
                 // Let the range call throw the appropriate localized
                 // exception at runtime if step is zero:
-                //     if step = 0 then (..) start finish
                 //     if step = 0 then (.. ..) start step finish
                 let throwIfStepIsZero =
                     mkCond
