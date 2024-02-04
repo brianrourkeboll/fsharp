@@ -130,3 +130,14 @@ module ForLoop =
         compilation
         |> verifyCompilation
 
+    // SOURCE=Ranges.fs SCFLAGS="--optimize+"	# Ranges.fs --optimize+
+    [<Theory; Directory(__SOURCE_DIRECTORY__, BaselineSuffix=".opt", Includes=[|"Ranges.fs"|])>]
+    let ``Ranges_fs_opt`` compilation =
+        compilation
+        |> verifyCompilation
+
+    // SOURCE=Ranges.fs SCFLAGS="--optimize-"	# Ranges.fs --optimize-
+    [<Theory; Directory(__SOURCE_DIRECTORY__, Includes=[|"Ranges.fs"|])>]
+    let ``Ranges_fs_nonopt`` compilation =
+        compilation
+        |> verifyCompilation
