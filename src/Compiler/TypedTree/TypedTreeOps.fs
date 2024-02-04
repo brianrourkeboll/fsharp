@@ -10326,7 +10326,13 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
             )
 
     /// This will raise an exception at runtime if step is zero.
-    let callAndIgnoreRangeExpr =
+    let callAndIgnoreRangeExpr start step finish =
+        // Use the potentially-evaluated-and-bound start, step, and finish.
+        let rangeExpr =
+            match rangeExpr with
+            | Expr.App (funcExpr, formalType, tyargs, _, m) -> Expr.App (funcExpr, formalType, tyargs, [start; step; finish], m)
+            | _ -> rangeExpr
+
         mkSequential
             mBody
             rangeExpr
@@ -10375,7 +10381,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                 mIn
                 g.unit_ty
                 (mkILAsmCeq g mIn step (mkZero g mIn))
-                callAndIgnoreRangeExpr
+                (callAndIgnoreRangeExpr start step finish)
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
@@ -10398,7 +10404,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                 mIn
                 g.unit_ty
                 (mkILAsmCeq g mIn step (mkZero g mIn))
-                callAndIgnoreRangeExpr
+                (callAndIgnoreRangeExpr start step finish)
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
@@ -10420,7 +10426,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                 mIn
                 g.unit_ty
                 (mkILAsmCeq g mIn step (mkZero g mIn))
-                callAndIgnoreRangeExpr
+                (callAndIgnoreRangeExpr start step finish)
                 (
                     mkCond
                         DebugPointAtBinding.NoneAtInvisible
@@ -10433,7 +10439,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
 
     match start, step, finish with
     // for … in start..0..finish do …
-    | _, Expr.Const (value = IntegralConst.Zero), _ -> callAndIgnoreRangeExpr
+    | _, Expr.Const (value = IntegralConst.Zero), _ -> callAndIgnoreRangeExpr start step finish
 
     // for … in 5..1 do …
     // for … in 1..-1..2 do …

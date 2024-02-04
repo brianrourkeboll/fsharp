@@ -309,13 +309,13 @@ module IntegralConst =
 [<return: Struct>]
 let (|ConstCount|_|) (start, step, finish) =
     match start, step, finish with
-    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) -> ValueSome (Const.Int32 (int ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) -> ValueSome (Const.Int64 (int64 ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 step), Expr.Const (value = Const.UInt64 finish) -> ValueSome (Const.UInt64 (uint64 ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 step), Expr.Const (value = Const.UInt32 finish) -> ValueSome (Const.UInt32 (uint32 ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) -> ValueSome (Const.IntPtr (int64 ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr step), Expr.Const (value = Const.UIntPtr finish) -> ValueSome (Const.UIntPtr (uint64 ((bigint finish - bigint start) / bigint step + 1I)))
-    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) -> ValueSome (Const.Int16 (int16 ((bigint finish - bigint start) / bigint step + 1I)))
+    | Expr.Const (value = Const.Int32 start), Expr.Const (value = Const.Int32 step), Expr.Const (value = Const.Int32 finish) -> ValueSome (Const.Int32 ((finish - start) / step + 1))
+    | Expr.Const (value = Const.Int64 start), Expr.Const (value = Const.Int64 step), Expr.Const (value = Const.Int64 finish) -> ValueSome (Const.Int64 ((finish - start) / step + 1L))
+    | Expr.Const (value = Const.UInt64 start), Expr.Const (value = Const.UInt64 step), Expr.Const (value = Const.UInt64 finish) -> ValueSome (Const.UInt64 ((finish - start) / step + 1UL))
+    | Expr.Const (value = Const.UInt32 start), Expr.Const (value = Const.UInt32 step), Expr.Const (value = Const.UInt32 finish) -> ValueSome (Const.UInt32 ((finish - start) / step + 1u))
+    | Expr.Const (value = Const.IntPtr start), Expr.Const (value = Const.IntPtr step), Expr.Const (value = Const.IntPtr finish) -> ValueSome (Const.IntPtr ((finish - start) / step + 1L))
+    | Expr.Const (value = Const.UIntPtr start), Expr.Const (value = Const.UIntPtr step), Expr.Const (value = Const.UIntPtr finish) -> ValueSome (Const.UIntPtr ((finish - start) / step + 1UL))
+    | Expr.Const (value = Const.Int16 start), Expr.Const (value = Const.Int16 step), Expr.Const (value = Const.Int16 finish) -> ValueSome (Const.Int16 ((finish - start) / step + 1s))
     | Expr.Const (value = Const.UInt16 start), Expr.Const (value = Const.UInt16 step), Expr.Const (value = Const.UInt16 finish) -> ValueSome (Const.UInt16 ((finish - start) / step + 1us))
     | Expr.Const (value = Const.SByte start), Expr.Const (value = Const.SByte step), Expr.Const (value = Const.SByte finish) -> ValueSome (Const.SByte ((finish - start) / step + 1y))
     | Expr.Const (value = Const.Byte start), Expr.Const (value = Const.Byte step), Expr.Const (value = Const.Byte finish) -> ValueSome (Const.Byte ((finish - start) / step + 1uy))
@@ -357,6 +357,12 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
             // Arbitrary step:
             //     (finish - start) / step + 1
             | _notConst ->
+                // Use the potentially-evaluated-and-bound start, step, and finish.
+                let rangeExpr =
+                    match rangeExpr with
+                    | Expr.App (funcExpr, formalType, tyargs, _, m) -> Expr.App (funcExpr, formalType, tyargs, [start; step; finish], m)
+                    | _ -> rangeExpr
+
                 /// This will raise an exception at runtime if step is zero.
                 let callAndIgnoreRangeExpr =
                     mkSequential
@@ -447,6 +453,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                             mkInitExpr start step finish)))
 
         let mkIlTy m ty =
+            let ty = stripMeasuresFromTy g ty
             if typeEquiv g ty g.int32_ty then g.ilg.typ_Int32
             elif typeEquiv g ty g.int64_ty then g.ilg.typ_Int64
             elif typeEquiv g ty g.uint64_ty then g.ilg.typ_UInt64
@@ -480,24 +487,26 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                 let collectorTy = g.mk_ListCollector_ty overallElemTy
 
                 let expr =
-                    mkCompGenLetMutableIn m "collector" collectorTy (mkDefault (m, collectorTy)) (fun (_, collector) ->
-                        mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
-                            let reader = InfoReader (g, amap)
+                    mkLetBindingsIfNeeded m overallElemTy start step finish (fun start step finish ->
+                        mkCompGenLetMutableIn m "collector" collectorTy (mkDefault (m, collectorTy)) (fun (_, collector) ->
+                            mkCompGenLetMutableIn m "loopVar" overallElemTy start (fun (loopVarVal, loopVar) ->
+                                let reader = InfoReader (g, amap)
 
-                            let body = mkCallCollectorAdd tcVal g reader m collector loopVar
+                                let body = mkCallCollectorAdd tcVal g reader m collector loopVar
 
-                            let loop =
-                                mkOptimizedRangeLoop
-                                    g
-                                    (m, m, m, DebugPointAtWhile.No)
-                                    (overallElemTy, overallSeqExpr)
-                                    (start, step, finish)
-                                    (loopVarVal, loopVar)
-                                    body
+                                let loop =
+                                    mkOptimizedRangeLoop
+                                        g
+                                        (m, m, m, DebugPointAtWhile.No)
+                                        (overallElemTy, overallSeqExpr)
+                                        (start, step, finish)
+                                        (loopVarVal, loopVar)
+                                        body
 
-                            let close = mkCallCollectorClose tcVal g reader m collector
+                                let close = mkCallCollectorClose tcVal g reader m collector
 
-                            mkSequential m loop close
+                                mkSequential m loop close
+                            )
                         )
                     )
 
