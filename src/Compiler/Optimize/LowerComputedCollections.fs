@@ -523,7 +523,7 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
 
             // [|1..5|]
             // [|1..2..5|]
-            | IntegralRange g (_, (start, step, finish) & ConstCount count) ->
+            | IntegralRange g (_, (start, step, _) & ConstCount count) ->
                 let arrayTy = mkArrayType g overallElemTy
 
                 // (# "newarr !0" type ('T) count : 'T array #)
@@ -544,21 +544,28 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                 // array[i] <- loopVar
                                 let setArrSubI = mkAsmExpr ([I_stelem_any (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)], [], [array; i; loopVar], [], m)
 
-                                // i <- i + 1
-                                let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [overallElemTy], m))
+                                // loopVar <- loopVar + step
+                                let incrV = mkValSet m (mkLocalValRef loopVarVal) (mkAsmExpr ([AI_add], [], [loopVar; step], [overallElemTy], m))
 
-                                let body = mkSequential m setArrSubI incrI
+                                // i <- i + 1
+                                let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [g.int32_ty], m))
+
+                                let body = mkSequentials g m [setArrSubI; incrV; incrI]
+
+                                let guard = mkILAsmClt g m i (mkLdlen g m array)
 
                                 let loop =
-                                    mkOptimizedRangeLoop
+                                    mkWhile
                                         g
-                                        (m, m, m, DebugPointAtWhile.No)
-                                        (overallElemTy, overallSeqExpr)
-                                        (start, step, finish)
-                                        (loopVarVal, loopVar)
-                                        body
+                                        (
+                                            DebugPointAtWhile.No,
+                                            NoSpecialWhileLoopMarker,
+                                            guard,
+                                            body,
+                                            m
+                                        )
 
-                                // while … do <body> done
+                                // while i < array.Length do <body> done
                                 // array
                                 mkSequential m loop array
                             )
@@ -599,21 +606,28 @@ let LowerComputedListOrArrayExpr tcVal (g: TcGlobals) amap overallExpr =
                                             // array[i] <- loopVar
                                             let setArrSubI = mkAsmExpr ([I_stelem_any (ILArrayShape.SingleDimensional, mkIlTy m overallElemTy)], [], [array; i; loopVar], [], m)
 
-                                            // i <- i + 1
-                                            let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [overallElemTy], m))
+                                            // loopVar <- loopVar + step
+                                            let incrV = mkValSet m (mkLocalValRef loopVarVal) (mkAsmExpr ([AI_add], [], [loopVar; step], [overallElemTy], m))
 
-                                            let body = mkSequential m setArrSubI incrI
+                                            // i <- i + 1
+                                            let incrI = mkValSet m (mkLocalValRef iVal) (mkAsmExpr ([AI_add], [], [i; mkOne g m], [g.int32_ty], m))
+
+                                            let body = mkSequentials g m [setArrSubI; incrV; incrI]
+
+                                            let guard = mkILAsmClt g m i (mkLdlen g m array)
 
                                             let loop =
-                                                mkOptimizedRangeLoop
+                                                mkWhile
                                                     g
-                                                    (m, m, m, DebugPointAtWhile.No)
-                                                    (overallElemTy, overallSeqExpr)
-                                                    (start, step, finish)
-                                                    (loopVarVal, loopVar)
-                                                    body
+                                                    (
+                                                        DebugPointAtWhile.No,
+                                                        NoSpecialWhileLoopMarker,
+                                                        guard,
+                                                        body,
+                                                        m
+                                                    )
 
-                                            // while … do <body> done
+                                            // while i < array.Length do <body> done
                                             // array
                                             mkSequential m loop array
                                         )
