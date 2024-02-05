@@ -10415,6 +10415,19 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                         (mkDown (startVal, start) originalStart step finish)
                 )
 
+        // Unsigned ranges can only ever go up.
+        //
+        //     if step = 0 then     <stepCannotBeZero>
+        //     else (* 0 < step *)  <up>
+        | _ when isUnsignedIntegerTy g rangeTy ->
+            mkCond
+                DebugPointAtBinding.NoneAtInvisible
+                mIn
+                g.unit_ty
+                (mkILAsmCeq g mIn step (mkZero g mIn))
+                (callAndIgnoreRangeExpr start step finish)
+                (mkUp (startVal, start) originalStart step finish)
+
         // Any other combination of dynamic exprs.
         //
         //     if step = 0 then     <stepCannotBeZero>
