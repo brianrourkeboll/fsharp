@@ -10239,29 +10239,24 @@ let (|ConstStartAndFinish|_|) (start, _step, finish) =
 
 let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (start, step, finish) (loopVarVal: Val, loopVar) body =
     let mkNecessaryLetBindingsFor f =
-        let setLoopVarAndBindRest start =
-            mkSequential mFor (mkValSet loopVarVal.Range (mkLocalValRef loopVarVal) start) (
-                match step, finish with
-                | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
-                    f (loopVarVal, loopVar) start step finish
+        mkSequential mFor (mkValSet loopVarVal.Range (mkLocalValRef loopVarVal) start) (
+            match step, finish with
+            | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
+                f (loopVarVal, loopVar) start step finish
 
-                | (Expr.Const _ | Expr.Val _), _ ->
+            | (Expr.Const _ | Expr.Val _), _ ->
+                mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
+                    f (loopVarVal, loopVar) start step finish)
+
+            | _, (Expr.Const _ | Expr.Val _) ->
+                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
+                    f (loopVarVal, loopVar) start step finish)
+
+            | _, _ ->
+                mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
                     mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
-                        f (loopVarVal, loopVar) start step finish)
-
-                | _, (Expr.Const _ | Expr.Val _) ->
-                    mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
-                        f (loopVarVal, loopVar) start step finish)
-
-                | _, _ ->
-                    mkCompGenLetIn mIn (nameof step) rangeTy step (fun (_, step) ->
-                        mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
-                            f (loopVarVal, loopVar) start step finish))
-            )
-
-        match start with
-        | Expr.Const _ | Expr.Val _ -> setLoopVarAndBindRest start
-        | _ -> mkCompGenLetIn mFor "originalStart" rangeTy start (fun (_, start) -> setLoopVarAndBindRest start)
+                        f (loopVarVal, loopVar) start step finish))
+        )
 
     let mkSignednessAppropriateClt g m e1 e2 =
         if isSignedIntegerTy g rangeTy then
@@ -10269,71 +10264,105 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
         else
             mkAsmExpr ([AI_clt_un], [], [e1; e2], [g.bool_ty], m)
 
-    /// while start <= finish && originalStart <= start do …
-    let mkUp (startVal, start) originalStart step finish =
-        let origStartLtEqStart =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mFor
-                g.bool_ty
-                (mkSignednessAppropriateClt g mFor originalStart start)
-                (mkTrue g mFor)
-                (mkILAsmCeq g mFor originalStart start)
+    /// while cur <= finish && not ovf do …
+    let mkUp (curVal, cur) step finish =
+        mkCompGenLetMutableIn mIn "ovf" g.bool_ty (mkFalse g mIn) (fun (ovfVal, ovf) ->
+            mkCompGenLetMutableIn mIn "next" rangeTy cur (fun (nextVal, next) ->
+                // if cur < finish then ovf = false
+                // else
+                //     if cur = finish then ovf = false
+                //     else false
+                let guard =
+                    let curLtFinish = mkSignednessAppropriateClt g mFor cur finish
+                    let curEqFinish = mkILAsmCeq g mFor cur finish
+                    let notOvf = mkILAsmCeq g mFor ovf (mkFalse g mFor)
 
-        // if start < finish then originalStart <= start else start = finish
-        let guard =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mFor
-                g.bool_ty
-                (mkSignednessAppropriateClt g mFor start finish)
-                origStartLtEqStart
-                (mkILAsmCeq g mFor start finish)
+                    mkCond
+                        DebugPointAtBinding.NoneAtInvisible
+                        mFor
+                        g.bool_ty
+                        curLtFinish
+                        notOvf
+                        (
+                            mkCond
+                                DebugPointAtBinding.NoneAtInvisible
+                                mFor
+                                g.bool_ty
+                                curEqFinish
+                                notOvf
+                                (mkFalse g mFor)
+                        )
 
-        let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+                let incrVars =
+                    // next <- next + step
+                    let incrNext = mkValSet mIn (mkLocalValRef nextVal) (mkAsmExpr ([AI_add], [], [next; step], [rangeTy], mIn))
+                    // ovf <- next < cur
+                    let setOvf = mkValSet mIn (mkLocalValRef ovfVal) (mkSignednessAppropriateClt g mFor next cur)
+                    // cur <- next
+                    let setCur = mkValSet mIn (mkLocalValRef curVal) next
+                    mkSequentials g mIn [incrNext; setOvf; setCur]
 
-        mkWhile
-            g
-            (
-                spInWhile,
-                WhileLoopForCompiledForEachExprMarker,
-                guard,
-                mkCompGenSequential mIn body incr,
-                mBody
+                mkWhile
+                    g
+                    (
+                        spInWhile,
+                        WhileLoopForCompiledForEachExprMarker,
+                        guard,
+                        mkCompGenSequential mIn body incrVars,
+                        mBody
+                    )
             )
+        )
 
-    /// while finish <= start && start <= originalStart do …
-    let mkDown (startVal, start) originalStart step finish =
-        let startLtEqOrigStart =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mFor
-                g.bool_ty
-                (mkSignednessAppropriateClt g mFor start originalStart)
-                (mkTrue g mFor)
-                (mkILAsmCeq g mFor start originalStart)
+    /// while finish <= cur && not ovf do …
+    let mkDown (curVal, cur) step finish =
+        mkCompGenLetMutableIn mIn "ovf" g.bool_ty (mkFalse g mIn) (fun (ovfVal, ovf) ->
+            mkCompGenLetMutableIn mIn "next" rangeTy cur (fun (nextVal, next) ->
+                // if finish < cur then ovf = false
+                // else
+                //     if finish = cur then ovf = false
+                //     else false
+                let guard =
+                    let finishLtCur = mkSignednessAppropriateClt g mFor finish cur
+                    let finishEqCur = mkILAsmCeq g mFor finish cur
+                    let notOvf = mkILAsmCeq g mFor ovf (mkFalse g mFor)
 
-        // if finish < start then start <= originalStart else finish = start
-        let guard =
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mFor
-                g.bool_ty
-                (mkSignednessAppropriateClt g mFor finish start)
-                startLtEqOrigStart
-                (mkILAsmCeq g mFor finish start)
+                    mkCond
+                        DebugPointAtBinding.NoneAtInvisible
+                        mFor
+                        g.bool_ty
+                        finishLtCur
+                        notOvf
+                        (
+                            mkCond
+                                DebugPointAtBinding.NoneAtInvisible
+                                mFor
+                                g.bool_ty
+                                finishEqCur
+                                notOvf
+                                (mkFalse g mFor)
+                        )
 
-        let incr = mkValSet mIn (mkLocalValRef startVal) (mkAsmExpr ([AI_add], [], [start; step], [rangeTy], mIn))
+                let incrVars =
+                    // next <- next + step
+                    let incrNext = mkValSet mIn (mkLocalValRef nextVal) (mkAsmExpr ([AI_add], [], [next; step], [rangeTy], mIn))
+                    // ovf <- cur < next
+                    let setOvf = mkValSet mIn (mkLocalValRef ovfVal) (mkSignednessAppropriateClt g mFor cur next)
+                    // cur <- next
+                    let setCur = mkValSet mIn (mkLocalValRef curVal) next
+                    mkSequentials g mIn [incrNext; setOvf; setCur]
 
-        mkWhile
-            g
-            (
-                spInWhile,
-                WhileLoopForCompiledForEachExprMarker,
-                guard,
-                mkCompGenSequential mIn body incr,
-                mBody
+                mkWhile
+                    g
+                    (
+                        spInWhile,
+                        WhileLoopForCompiledForEachExprMarker,
+                        guard,
+                        mkCompGenSequential mIn body incrVars,
+                        mBody
+                    )
             )
+        )
 
     /// This will raise an exception at runtime if step is zero.
     let callAndIgnoreRangeExpr start step finish =
@@ -10353,17 +10382,11 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
         match originalStart, step, finish with
         // Dynamic start and/or finish, but positive constant step.
         //
-        // step > 0:
+        // 0 < step:
         //     if finish < start then   ()
         //     else                     <up>
         | _, Expr.Const (value = IntegralConst.Positive), _ ->
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mIn
-                g.unit_ty
-                (mkSignednessAppropriateClt g mIn finish start)
-                (mkUnit g mIn)
-                (mkUp (startVal, start) originalStart step finish)
+            mkUp (startVal, start) step finish
 
         // Dynamic start and/or finish, but negative constant step.
         //
@@ -10371,13 +10394,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
         //     if start < finish then   ()
         //     else                     <down>
         | _, Expr.Const (value = _negative), _ ->
-            mkCond
-                DebugPointAtBinding.NoneAtInvisible
-                mIn
-                g.unit_ty
-                (mkSignednessAppropriateClt g mIn start finish)
-                (mkUnit g mIn)
-                (mkDown (startVal, start) originalStart step finish)
+            mkDown (startVal, start) step finish
 
         // Dynamic step, but constant start and finish.
         //
@@ -10399,7 +10416,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn step (mkZero g mIn))
                         (mkUnit g mIn)
-                        (mkUp (startVal, start) originalStart step finish)
+                        (mkUp (startVal, start) step finish)
                 )
 
         // Dynamic step, but constant start and finish.
@@ -10422,7 +10439,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn (mkZero g mIn) step)
                         (mkUnit g mIn)
-                        (mkDown (startVal, start) originalStart step finish)
+                        (mkDown (startVal, start) step finish)
                 )
 
         // Unsigned ranges can only ever go up.
@@ -10436,7 +10453,7 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                 g.unit_ty
                 (mkILAsmCeq g mIn step (mkZero g mIn))
                 (callAndIgnoreRangeExpr start step finish)
-                (mkUp (startVal, start) originalStart step finish)
+                (mkUp (startVal, start) step finish)
 
         // Any other combination of dynamic exprs.
         //
@@ -10456,8 +10473,8 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                         mIn
                         g.unit_ty
                         (mkSignednessAppropriateClt g mIn (mkZero g mIn) step)
-                        (mkUp (startVal, start) originalStart step finish)
-                        (mkDown (startVal, start) originalStart step finish)
+                        (mkUp (startVal, start) step finish)
+                        (mkDown (startVal, start) step finish)
                 )
 
     match start, step, finish with
@@ -10470,10 +10487,10 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
 
     // for … in 1..5 do …
     // for … in 1..2..5 do …
-    | ConstRange FSharpForLoopUp -> mkNecessaryLetBindingsFor mkUp
+    | ConstRange FSharpForLoopUp -> mkNecessaryLetBindingsFor (fun (startVal, start) _ step finish -> mkUp (startVal, start) step finish)
 
     // for … in 5..-1..1 do …
-    | ConstRange FSharpForLoopDown -> mkNecessaryLetBindingsFor mkDown
+    | ConstRange FSharpForLoopDown -> mkNecessaryLetBindingsFor (fun (startVal, start) _ step finish -> mkDown (startVal, start) step finish)
 
     // for … in start..finish do …
     // for … in start..step..finish do …
