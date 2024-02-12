@@ -2559,6 +2559,8 @@ val (|IntegralRange|_|): g: TcGlobals -> expr: Expr -> (TType * (Expr * Expr * E
 [<return: Struct>]
 val (|EmptyRange|_|): start: Expr * step: Expr * finish: Expr -> unit voption
 
+val mkRangeCount: g: TcGlobals -> m: range -> rangeTy: TType -> rangeExpr: Expr -> start: Expr -> step: Expr -> finish: Expr -> Expr
+
 /// Makes an optimized while-loop for the given
 /// integral start, step, and finish.
 val mkOptimizedRangeLoop:
@@ -2566,9 +2568,10 @@ val mkOptimizedRangeLoop:
     mBody: range * mFor: range * mIn: range * spInWhile: DebugPointAtWhile ->
         rangeTy: TType * rangeExpr: Expr ->
             start: Expr * step: Expr * finish: Expr ->
-                loopVarVal: Val * loopVar: Expr ->
-                    body: Expr ->
-                        Expr
+                idxVal: Val * idxVar: Expr ->
+                    loopVal: Val * loopVar: Expr ->
+                        body: Expr ->
+                            Expr
 
 type OptimizeForExpressionOptions =
     | OptimizeIntRangesOnly
