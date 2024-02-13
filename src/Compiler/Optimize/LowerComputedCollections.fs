@@ -351,8 +351,6 @@ module Array =
                     m
                 )
 
-            //let guard = mkILAsmClt g m idxVar (mkLdlen g m array)
-
         /// let array = (# "newarr !0" type ('T) count : 'T array #) in
         /// <initialization loop>
         /// array
