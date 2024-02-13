@@ -10272,6 +10272,7 @@ let (|ConstCount|_|) (start, step, finish) =
 
     | _ -> ValueNone
 
+/// Makes an expression to compute the iteration count for the given integral range.
 let mkRangeCount g m rangeTy rangeExpr start step finish =
     /// This will raise an exception at runtime if step is zero.
     let callAndIgnoreRangeExpr =
@@ -10386,13 +10387,21 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
             mkAsmExpr ([AI_add], [], [pseudoCount; mkOne ty], [ty], m)
 
     match start, step, finish with
+    // start..0..finish
     | _, Expr.Const (value = IntegralConst.Zero), _ -> mkSequential m callAndIgnoreRangeExpr (mkMinusOne g m)
 
+    // 5..1
+    // 1..-1..5
     | EmptyRange -> mkZero rangeTy
 
+    // 1..5
+    // 1..2..5
+    // 5..-1..1
     | ConstCount count -> Expr.Const (count, m, rangeTy)
 
-    // step = 1:
+    // start..finish
+    // start..1..finish
+    //
     //     if finish < start then 0 else finish - start + 1
     | _, Expr.Const (value = IntegralConst.One), _ ->
         let diff = mkDiff finish start
@@ -10408,7 +10417,8 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
 
     // (Only possible for signed types.)
     //
-    // step = -1:
+    // start..-1..finish
+    //
     //     if start < finish then 0 else start - finish + 1
     | _, Expr.Const (value = IntegralConst.MinusOne), _ ->
         let diff = mkDiff start finish
@@ -10422,7 +10432,8 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
             (mkZero diffTy)
             (mkAddOne diff)
 
-    // 0 < step:
+    // start..2..finish
+    //
     //     if finish < start then 0 else (finish - start) / step + 1
     | _, Expr.Const (value = IntegralConst.Positive), _ ->
         let diff = mkDiff finish start
@@ -10438,7 +10449,8 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
 
     // (Only possible for signed types.)
     //
-    // step < 0:
+    // start..-2..finish
+    //
     //     if start < finish then 0 else (start - finish) / abs step + 1
     | _, Expr.Const (value = negativeStep), _ ->
         let diff = mkDiff start finish
@@ -10452,7 +10464,7 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
             (mkZero diffTy)
             (mkAddOne (mkQuotient diff (Expr.Const (IntegralConst.abs negativeStep, m, diffTy))))
 
-    // Arbitrary non-constant step.
+    // start..step..finish
     //
     //     if step = 0 then
     //         ignore ((.. ..) start step finish) // Throws.
