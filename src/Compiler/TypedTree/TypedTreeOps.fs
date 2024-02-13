@@ -10116,8 +10116,8 @@ let (|ValApp|_|) g vref expr =
 module IntegralConst =
     /// Constant 0.
     [<return: Struct>]
-    let (|Zero|_|) expr =
-        match expr with
+    let (|Zero|_|) c =
+        match c with
         | Const.Zero
         | Const.Int32 0
         | Const.Int64 0L
@@ -10346,7 +10346,7 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
         elif typeEquiv g underlyingTy g.sbyte_ty then Expr.Const (Const.UInt64 (uint64 (byte SByte.MaxValue + 1uy)), m, destTy)
         else error (InternalError ($"Unrecognized signed integral type '{originalTy}'.", m))
 
-    /// Unsigned diff: e1 - e2.
+    /// Widened diff as unsigned: unsigned (e1 - e2).
     /// Expects that e1 >= e2.
     let mkDiff e1 e2 =
         if isSignedIntegerTy g rangeTy && not (typeEquiv g (stripMeasuresFromTy g rangeTy) g.nativeint_ty) then
@@ -10356,7 +10356,14 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
             mkAsmExpr ([AI_sub], [], [e1; e2], [rangeTy], m)
 
     /// diff / step
-    let mkQuotient diff step = mkAsmExpr ([AI_div_un], [], [diff; step], [tyOfExpr g diff], m)
+    let mkQuotient diff step =
+        let step =
+            if typeEquiv g (tyOfExpr g diff) g.uint64_ty then
+                mkAsmExpr ([AI_conv DT_I8], [], [step], [g.uint64_ty], m)
+            else
+                step
+
+        mkAsmExpr ([AI_div_un], [], [diff; step], [tyOfExpr g diff], m)
 
     /// (diff / step + 1)
     let mkAddOne pseudoCount =
@@ -10404,7 +10411,7 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
     // step = -1:
     //     if start < finish then 0 else start - finish + 1
     | _, Expr.Const (value = IntegralConst.MinusOne), _ ->
-        let diff = mkDiff finish start
+        let diff = mkDiff start finish
         let diffTy = tyOfExpr g diff
 
         mkCond
@@ -10498,7 +10505,6 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
                             diffTy
                             (mkILAsmCeq g m step (mkMinValue rangeTy))
                             (mkMaxValuePlusOneAsUnsigned rangeTy diffTy)
-                            //(mkAsmExpr ([AI_neg], [], [absStep], [diffTy], m))
                             absStep
 
                     mkCond
@@ -10530,8 +10536,44 @@ let mkRangeCount g m rangeTy rangeExpr start step finish =
 
         mkSequential m throwIfStepIsZero count
 
-let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (start, step, finish) (idxVal: Val, idxVar) (loopVal: Val, loopVar) body =
-    let mkLetBindingsIfNeeded f =
+type Count = Expr
+type Idx = Expr
+type Elem = Expr
+type Body = Expr
+type Loop = Expr
+
+let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, rangeExpr) (start, step, finish) buildLoop =
+    let mkZero g m ty =
+        let underlyingTy = stripMeasuresFromTy g ty
+        if typeEquiv g underlyingTy g.int32_ty then Expr.Const (Const.Int32 0, m, ty)
+        elif typeEquiv g underlyingTy g.int64_ty then Expr.Const (Const.Int64 0L, m, ty)
+        elif typeEquiv g underlyingTy g.uint64_ty then Expr.Const (Const.UInt64 0UL, m, ty)
+        elif typeEquiv g underlyingTy g.uint32_ty then Expr.Const (Const.UInt32 0u, m, ty)
+        elif typeEquiv g underlyingTy g.nativeint_ty then Expr.Const (Const.IntPtr 0L, m, ty)
+        elif typeEquiv g underlyingTy g.unativeint_ty then Expr.Const (Const.UIntPtr 0UL, m, ty)
+        elif typeEquiv g underlyingTy g.int16_ty then Expr.Const (Const.Int16 0s, m, ty)
+        elif typeEquiv g underlyingTy g.uint16_ty then Expr.Const (Const.UInt16 0us, m, ty)
+        elif typeEquiv g underlyingTy g.sbyte_ty then Expr.Const (Const.SByte 0y, m, ty)
+        elif typeEquiv g underlyingTy g.byte_ty then Expr.Const (Const.Byte 0uy, m, ty)
+        elif typeEquiv g underlyingTy g.char_ty then Expr.Const (Const.Char '\000', m, ty)
+        else error (InternalError ($"Unrecognized integral type '{ty}'.", m))
+
+    let mkOne g m ty =
+        let underlyingTy = stripMeasuresFromTy g ty
+        if typeEquiv g underlyingTy g.int32_ty then Expr.Const (Const.Int32 1, m, ty)
+        elif typeEquiv g underlyingTy g.int64_ty then Expr.Const (Const.Int64 1L, m, ty)
+        elif typeEquiv g underlyingTy g.uint64_ty then Expr.Const (Const.UInt64 1UL, m, ty)
+        elif typeEquiv g underlyingTy g.uint32_ty then Expr.Const (Const.UInt32 1u, m, ty)
+        elif typeEquiv g underlyingTy g.nativeint_ty then Expr.Const (Const.IntPtr 1L, m, ty)
+        elif typeEquiv g underlyingTy g.unativeint_ty then Expr.Const (Const.UIntPtr 1UL, m, ty)
+        elif typeEquiv g underlyingTy g.int16_ty then Expr.Const (Const.Int16 1s, m, ty)
+        elif typeEquiv g underlyingTy g.uint16_ty then Expr.Const (Const.UInt16 1us, m, ty)
+        elif typeEquiv g underlyingTy g.sbyte_ty then Expr.Const (Const.SByte 1y, m, ty)
+        elif typeEquiv g underlyingTy g.byte_ty then Expr.Const (Const.Byte 1uy, m, ty)
+        elif typeEquiv g underlyingTy g.char_ty then Expr.Const (Const.Char '\001', m, ty)
+        else error (InternalError ($"Unrecognized integral type '{ty}'.", m))
+
+    let inline mkLetBindingsIfNeeded f =
         match start, step, finish with
         | (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _), (Expr.Const _ | Expr.Val _) ->
             f start step finish
@@ -10569,31 +10611,48 @@ let mkOptimizedRangeLoop (g: TcGlobals) (mBody, mFor, mIn, spInWhile) (rangeTy, 
                     mkCompGenLetIn mIn (nameof finish) rangeTy finish (fun (_, finish) ->
                         f start step finish)))
 
-    let mkIntegralWhileLoop step count =
-        // loopVar <- loopVar + step
-        let incrV = mkValSet mIn (mkLocalValRef loopVal) (mkAsmExpr ([AI_add], [], [loopVar; step], [rangeTy], mIn))
-
-        // i <- i + 1
-        let incrI = mkValSet mIn (mkLocalValRef idxVal) (mkAsmExpr ([AI_add], [], [idxVar; mkOne g mIn], [rangeTy], mIn))
-
-        let body = mkSequentials g mBody [body; incrV; incrI]
-
-        let guard = mkAsmExpr ([AI_clt_un], [], [idxVar; count], [g.bool_ty], mFor)
-
-        mkWhile
-            g
-            (
-                spInWhile,
-                WhileLoopForCompiledForEachExprMarker,
-                guard,
-                body,
-                mBody
-            )
-
     mkLetBindingsIfNeeded (fun start step finish ->
-        let count = mkRangeCount g mIn rangeTy rangeExpr start step finish
-        mkCompGenLetIn mIn "count" (tyOfExpr g count) count (fun (_, count) ->
-            mkIntegralWhileLoop step count
+        let mkBindCountIfNeeded f =
+            match mkRangeCount g mIn rangeTy rangeExpr start step finish with
+            | Expr.Const _ as count -> f count
+            | count -> mkCompGenLetIn mIn "count" (tyOfExpr g count) count (fun (_, count) -> f count)
+
+        mkBindCountIfNeeded (fun count ->
+            buildLoop count (fun mkBody ->
+                let countTy = tyOfExpr g count
+
+                mkCompGenLetMutableIn mIn "i" countTy (mkZero g mIn countTy) (fun (idxVal, idxVar) ->
+                    mkCompGenLetMutableIn mIn "loopVar" rangeTy start (fun (loopVal, loopVar) ->
+                        // loopVar <- loopVar + step
+                        let incrV = mkValSet mIn (mkLocalValRef loopVal) (mkAsmExpr ([AI_add], [], [loopVar; step], [rangeTy], mIn))
+
+                        // i <- i + 1
+                        let incrI = mkValSet mIn (mkLocalValRef idxVal) (mkAsmExpr ([AI_add], [], [idxVar; mkOne g mIn countTy], [rangeTy], mIn))
+
+                        // <body>
+                        // loopVar <- loopVar + step
+                        // i <- i + 1
+                        let body = mkSequentials g mBody [mkBody idxVar loopVar; incrV; incrI]
+
+                        // i < count
+                        let guard = mkAsmExpr ([AI_clt_un], [], [idxVar; count], [g.bool_ty], mFor)
+
+                        // while i < count do
+                        //     <body>
+                        //     loopVar <- loopVar + step
+                        //     i <- i + 1
+                        mkWhile
+                            g
+                            (
+                                spInWhile,
+                                WhileLoopForCompiledForEachExprMarker,
+                                guard,
+                                body,
+                                mBody
+                            )
+                    )
+                )
+            )
         )
     )
 
@@ -10615,18 +10674,12 @@ let DetectAndOptimizeForEachExpression g option expr =
     | _, CompiledForEachExpr g (_enumTy, rangeExpr & IntegralRange g (rangeTy, (start, step, finish)), elemVar, bodyExpr, ranges) ->
         let mBody, _spFor, _spIn, mFor, mIn, spInWhile, _mWhole = ranges
 
-        mkCompGenLetMutableIn mIn "i" rangeTy (mkZero g mIn) (fun (idxVal, idxVar) ->
-            mkCompGenLetMutableIn elemVar.Range "loopVar" rangeTy start (fun (loopVarVal, loopVar) ->
-                mkOptimizedRangeLoop
-                    g
-                    (mBody, mFor, mIn, spInWhile)
-                    (rangeTy, rangeExpr)
-                    (start, step, finish)
-                    (idxVal, idxVar)
-                    (loopVarVal, loopVar)
-                    (mkInvisibleLet elemVar.Range elemVar loopVar bodyExpr)
-            )
-        )
+        mkOptimizedRangeLoop
+            g
+            (mBody, mFor, mIn, spInWhile)
+            (rangeTy, rangeExpr)
+            (start, step, finish)
+            (fun _count mkLoop -> mkLoop (fun _idxVar loopVar -> mkInvisibleLet elemVar.Range elemVar loopVar bodyExpr))
 
     | OptimizeAllForExpressions, CompiledForEachExpr g (enumerableTy, enumerableExpr, elemVar, bodyExpr, ranges) ->
 
