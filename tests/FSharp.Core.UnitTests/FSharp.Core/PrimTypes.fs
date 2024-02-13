@@ -1010,6 +1010,9 @@ module RangeTests =
         [<Fact>]
         let ``Range.Byte``   () = RangeTestsHelpers.unsigned System.Byte.MinValue   System.Byte.MaxValue
 
+        //[<Fact>]
+        //let ``Range.Char``   () = RangeTestsHelpers.unsigned System.Char.MinValue   System.Char.MaxValue
+
         [<Fact>]
         let ``Range.Int16``  () = RangeTestsHelpers.signed   System.Int16.MinValue  System.Int16.MaxValue
 
@@ -1041,28 +1044,31 @@ module RangeTests =
 
     module RunTime =
         [<Theory; InlineData(System.SByte.MinValue, System.SByte.MaxValue)>]
-        let ``Range.SByte``  min0 max0 = RangeTestsHelpers.signed   min0 max0
+        let ``Range.SByte``  (min0: sbyte) (max0: sbyte) = RangeTestsHelpers.signed   min0 max0
 
         [<Theory; InlineData(System.Byte.MinValue, System.Byte.MaxValue)>]
-        let ``Range.Byte``   min0 max0 = RangeTestsHelpers.unsigned min0 max0
+        let ``Range.Byte``   (min0: byte) (max0: byte) = RangeTestsHelpers.unsigned min0 max0
+
+        //[<Theory; InlineData(System.Char.MinValue, System.Char.MaxValue)>]
+        //let ``Range.Char``   (min0: char) (max0: char) = RangeTestsHelpers.unsigned min0 max0
 
         [<Theory; InlineData(System.Int16.MinValue, System.Int16.MaxValue)>]
-        let ``Range.Int16``  min0 max0 = RangeTestsHelpers.signed   min0 max0
+        let ``Range.Int16``  (min0: int16) (max0: int16) = RangeTestsHelpers.signed   min0 max0
 
         [<Theory; InlineData(System.UInt16.MinValue, System.UInt16.MaxValue)>]
-        let ``Range.UInt16`` min0 max0 = RangeTestsHelpers.unsigned min0 max0
+        let ``Range.UInt16`` (min0: uint16) (max0: uint16) = RangeTestsHelpers.unsigned min0 max0
 
         [<Theory; InlineData(System.Int32.MinValue, System.Int32.MaxValue)>]
         let ``Range.Int32``  min0 max0 = RangeTestsHelpers.signed   min0 max0
 
         [<Theory; InlineData(System.UInt32.MinValue, System.UInt32.MaxValue)>]
-        let ``Range.UInt32`` min0 max0 = RangeTestsHelpers.unsigned min0 max0
+        let ``Range.UInt32`` (min0: uint) (max0: uint) = RangeTestsHelpers.unsigned min0 max0
 
         [<Theory; InlineData(System.Int64.MinValue, System.Int64.MaxValue)>]
-        let ``Range.Int64``  min0 max0 = RangeTestsHelpers.signed   min0 max0
+        let ``Range.Int64``  (min0: int64) (max0: int64) = RangeTestsHelpers.signed   min0 max0
 
         [<Theory; InlineData(System.UInt64.MinValue, System.UInt64.MaxValue)>]
-        let ``Range.UInt64`` min0 max0 = RangeTestsHelpers.unsigned min0 max0
+        let ``Range.UInt64`` (min0: uint64) (max0: uint64) = RangeTestsHelpers.unsigned min0 max0
 
         [<Fact>]
         let ``Range.IntPtr`` () =
