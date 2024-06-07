@@ -68,17 +68,13 @@ type internal UseNameofInsteadDiagnosticAnalyzer [<ImportingConstructor>] () =
                     | :? DocumentData' as data when data.Hash = textVersionHash -> return data.Diagnostics
                     | _ ->
                         let! parseResults = document.GetFSharpParseResultsAsync(nameof UseNameofInsteadDiagnosticAnalyzer)
+                        let! sourceText = document.GetTextAsync cancellationToken
+
+                        let getLineString line =
+                            sourceText.Lines[Line.toZ line].ToString()
 
                         let couldUseNameofInstead =
-                            let comparer =
-                                { new IEqualityComparer<struct (string * range)> with
-                                    member _.Equals((id1, m1), (id2, m2)) =
-                                        Range.equals m1 m2 && String.Equals(id1, id2, StringComparison.Ordinal)
-
-                                    member _.GetHashCode pair = pair.GetHashCode()
-                                }
-
-                            (HashSet comparer, parseResults.ParseTree)
+                            (Dictionary Range.comparer, parseResults.ParseTree)
                             ||> ParsedInput.fold (fun acc path node ->
                                 let rec isInScopeIn path (name: string) =
                                     let (|Ident|) (ident: Ident) = ident.idText
@@ -106,16 +102,52 @@ type internal UseNameofInsteadDiagnosticAnalyzer [<ImportingConstructor>] () =
                                     | SyntaxNode.SynExpr(SynExpr.Lambda(parsedData = Some(MatchingPat, _))) :: _ -> true
 
                                     | SyntaxNode.SynPat _ :: path
-                                    | SyntaxNode.SynExpr _ :: path -> isInScopeIn path name
+                                    | SyntaxNode.SynExpr _ :: path
+                                    | SyntaxNode.SynMatchClause _ :: path -> isInScopeIn path name
 
                                     | _ -> false
 
                                 match node with
-                                | SyntaxNode.SynExpr(SynExpr.Const(constant = SynConst.String(name, SynStringKind.Regular, m)))
+                                | SyntaxNode.SynExpr(SynExpr.Const(constant = SynConst.String(name, SynStringKind.Regular, m)) as expr) when
+                                    name |> isInScopeIn path
+                                    ->
+                                    let needsParens =
+                                        SynExpr.shouldBeParenthesizedInContext
+                                            getLineString
+                                            path
+                                            (SynExpr.App(
+                                                ExprAtomicFlag.NonAtomic,
+                                                false,
+                                                SynExpr.Ident(Ident(nameof nameof, Range.range0)),
+                                                expr,
+                                                Range.range0
+                                            ))
+
+                                    acc[m] <- if needsParens then $"(nameof {name})" else $"nameof {name}"
+                                    acc
+
                                 | SyntaxNode.SynPat(SynPat.Const(constant = SynConst.String(name, SynStringKind.Regular, m))) when
                                     name |> isInScopeIn path
                                     ->
-                                    ignore (acc.Add(name, m))
+                                    let needsParens =
+                                        SynPat.shouldBeParenthesizedInContext
+                                            path
+                                            (SynPat.LongIdent(
+                                                SynLongIdent([ Ident(nameof nameof, Range.range0) ], [], []),
+                                                None,
+                                                None,
+                                                SynArgPats.Pats
+                                                    [
+                                                        SynPat.Const(
+                                                            SynConst.String(name, SynStringKind.Regular, Range.range0),
+                                                            Range.range0
+                                                        )
+                                                    ],
+                                                None,
+                                                Range.range0
+                                            ))
+
+                                    acc[m] <- if needsParens then $"(nameof {name})" else $"nameof {name}"
                                     acc
 
                                 | _ -> acc)
@@ -128,12 +160,12 @@ type internal UseNameofInsteadDiagnosticAnalyzer [<ImportingConstructor>] () =
                                     let! sourceText = document.GetTextAsync cancellationToken
                                     let builder = ImmutableArray.CreateBuilder couldUseNameofInstead.Count
 
-                                    for name, range in couldUseNameofInstead do
+                                    for KeyValue(range, replacement) in couldUseNameofInstead do
                                         builder.Add(
                                             Diagnostic.Create(
                                                 descriptor,
                                                 RoslynHelpers.RangeToLocation(range, sourceText, document.FilePath),
-                                                ImmutableDictionary.CreateRange [| KeyValuePair("name", name) |]
+                                                ImmutableDictionary.CreateRange [| KeyValuePair("replacement", replacement) |]
                                             )
                                         )
 

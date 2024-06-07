@@ -32,12 +32,12 @@ type internal FSharpReplaceQuotedStringWithNameofCodeFixProvider [<ImportingCons
                     assert not context.Diagnostics.IsEmpty
 
                     let diag = context.Diagnostics[0]
-                    let name = diag.Properties["name"]
+                    let replacement = diag.Properties["replacement"]
 
                     ValueSome
                         {
                             Name = CodeFix.ReplaceQuotedStringWithNameof
                             Message = title
-                            Changes = [ TextChange(context.Span, $"(nameof {name})") ]
+                            Changes = [ TextChange(context.Span, replacement) ]
                         }
             )
