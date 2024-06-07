@@ -152,6 +152,11 @@
         <target state="translated">Anahtar kapsayıcısı imzalama bu platformda desteklenmiyor.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Kullanılabilir aşırı yüklemeler:\n{0}</target>

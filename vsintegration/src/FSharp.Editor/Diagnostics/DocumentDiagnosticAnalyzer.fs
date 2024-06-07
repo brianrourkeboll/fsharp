@@ -114,10 +114,16 @@ type internal FSharpDocumentDiagnosticAnalyzer [<ImportingConstructor>] () =
                     UnnecessaryParenthesesDiagnosticAnalyzer.GetDiagnostics document
                 | _ -> CancellableTask.singleton ImmutableArray.Empty
 
-            if errors.Count = 0 && unnecessaryParentheses.IsEmpty then
+            let! couldUseNameofs =
+                match diagnosticType with
+                | DiagnosticsType.Syntax -> UseNameofInsteadDiagnosticAnalyzer.GetDiagnostics document
+                | _ -> CancellableTask.singleton ImmutableArray.Empty
+
+            if errors.Count = 0 && unnecessaryParentheses.IsEmpty && couldUseNameofs.IsEmpty then
                 return ImmutableArray.Empty
             else
-                let iab = ImmutableArray.CreateBuilder(errors.Count + unnecessaryParentheses.Length)
+                let iab =
+                    ImmutableArray.CreateBuilder(errors.Count + unnecessaryParentheses.Length + couldUseNameofs.Length)
 
                 for diagnostic in errors do
                     if diagnostic.StartLine <> 0 && diagnostic.EndLine <> 0 then
@@ -142,6 +148,7 @@ type internal FSharpDocumentDiagnosticAnalyzer [<ImportingConstructor>] () =
                         iab.Add(RoslynHelpers.ConvertError(diagnostic, location))
 
                 iab.AddRange unnecessaryParentheses
+                iab.AddRange couldUseNameofs
                 return iab.ToImmutable()
         }
 

@@ -152,6 +152,11 @@
         <target state="translated">키 컨테이너 서명은 이 플랫폼에서 지원되지 않습니다.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">사용 가능한 오버로드:\n{0}</target>

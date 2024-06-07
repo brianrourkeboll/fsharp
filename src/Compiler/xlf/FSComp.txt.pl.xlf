@@ -152,6 +152,11 @@
         <target state="translated">Podpisywanie kontenerów kluczy nie jest obsługiwane na tej platformie.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Dostępne przeciążenia:\n{0}</target>

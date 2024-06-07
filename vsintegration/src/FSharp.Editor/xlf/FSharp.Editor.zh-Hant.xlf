@@ -255,6 +255,11 @@ Show remarks in Quick Info</source>
         <target state="translated">將 '{0}' 重新命名為 '_'</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">傳回:</target>

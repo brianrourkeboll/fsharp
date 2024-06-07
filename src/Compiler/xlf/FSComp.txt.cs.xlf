@@ -152,6 +152,11 @@
         <target state="translated">Podepisování kontejneru klíčů se na této platformě nepodporuje.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Dostupná přetížení:\n{0}</target>

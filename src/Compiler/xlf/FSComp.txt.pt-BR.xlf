@@ -152,6 +152,11 @@
         <target state="translated">Não há suporte para a assinatura do contêiner de chave nesta plataforma.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Sobrecargas disponíveis:\n{0}</target>

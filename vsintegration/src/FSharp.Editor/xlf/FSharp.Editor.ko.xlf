@@ -255,6 +255,11 @@ F# 구문 규칙에 맞는 줄 바꿈을 추가하여 지정된 너비에 시그
         <target state="translated">'{0}'의 이름을 '_'로 바꾸기</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">반환 값:</target>

@@ -255,6 +255,11 @@ Mostrar comentarios en Información rápida</target>
         <target state="translated">Cambiar nombre de "{0}" por "_"</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">Devuelve:</target>

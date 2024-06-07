@@ -152,6 +152,11 @@
         <target state="translated">キー コンテナーの署名は、このプラットフォームではサポートされていません。</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">使用可能なオーバーロード:\n{0}</target>

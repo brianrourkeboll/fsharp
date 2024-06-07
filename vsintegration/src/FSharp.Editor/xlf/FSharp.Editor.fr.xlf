@@ -255,6 +255,11 @@ Afficher les notes dans Info express</target>
         <target state="translated">Renommer '{0}' en '_'</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">Retourne :</target>

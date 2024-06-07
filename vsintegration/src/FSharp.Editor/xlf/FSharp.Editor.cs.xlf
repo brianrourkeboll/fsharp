@@ -255,6 +255,11 @@ Zobrazit poznámky v Rychlých informacích</target>
         <target state="translated">Přejmenujte {0} na _.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">Vrací:</target>

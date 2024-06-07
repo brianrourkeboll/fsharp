@@ -255,6 +255,11 @@ Hinweise in QuickInfo anzeigen</target>
         <target state="translated">"{0}" in "_" umbenennen</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">Rückgabe:</target>

@@ -152,6 +152,11 @@
         <target state="translated">La signature de conteneurs de clés n'est pas prise en charge sur cette plateforme.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Surcharges disponibles :\n{0}</target>

@@ -255,6 +255,11 @@ F# 構文規則に準拠した改行を追加して、署名を指定された�
         <target state="translated">'{0}' から '_' に名前を変更する</target>
         <note />
       </trans-unit>
+      <trans-unit id="ReplaceQuotedStringWithNameof">
+        <source>Replace quoted string with nameof</source>
+        <target state="new">Replace quoted string with nameof</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ReturnsHeader">
         <source>Returns:</source>
         <target state="translated">戻り値:</target>

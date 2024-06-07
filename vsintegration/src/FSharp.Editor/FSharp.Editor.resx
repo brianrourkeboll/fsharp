@@ -360,6 +360,9 @@ Use live (unsaved) buffers for analysis</value>
   <data name="RemoveUnnecessaryParentheses" xml:space="preserve">
     <value>Remove unnecessary parentheses</value>
   </data>
+  <data name="ReplaceQuotedStringWithNameof" xml:space="preserve">
+    <value>Replace quoted string with nameof</value>
+  </data>
   <data name="RemarksHeader" xml:space="preserve">
     <value>Remarks:</value>
   </data>

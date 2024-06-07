@@ -152,6 +152,11 @@
         <target state="translated">La firma del contenitore di chiavi non è supportata in questa piattaforma.</target>
         <note />
       </trans-unit>
+      <trans-unit id="couldUseNameof">
+        <source>Use nameof instead.</source>
+        <target state="new">Use nameof instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="csAvailableOverloads">
         <source>Available overloads:\n{0}</source>
         <target state="translated">Overload disponibili:\n{0}</target>
