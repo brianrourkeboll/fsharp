@@ -3095,6 +3095,18 @@ module Array =
     [<CompiledName("InsertManyAt")>]
     val insertManyAt: index: int -> values: seq<'T> -> source: 'T array -> 'T array
 
+    [<CompiledName("Shuffle")>]
+    val inline shuffle : randomizer:(int -> int) -> array:'T array -> 'T array
+
+    [<CompiledName("Choice")>]
+    val choice : randomizer:(int -> int) -> array:'T array -> 'T
+
+    [<CompiledName("Choices")>]
+    val inline choices : randomizer:(int -> int) -> count:int -> array:'T array -> 'T array
+
+    [<CompiledName("Sample")>]
+    val inline sample : randomizer:(int -> int) -> count:int -> array:'T array -> 'T array
+
     /// <summary>Provides parallel operations on arrays </summary>
     module Parallel =
 

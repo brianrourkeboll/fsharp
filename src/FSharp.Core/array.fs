@@ -1936,6 +1936,94 @@ module Array =
 
             result
 
+    [<CompiledName("Shuffle")>]
+    let inline shuffle ([<InlineIfLambda>] randomizer) (array: 'T array) =
+        checkNonNull (nameof array) array
+
+        let array = Unchecked.unbox<'T array> (array.Clone())
+    
+        for i in array.Length - 1 .. -1 .. 1 do
+            let j = randomizer (i + 1)
+            if j < 0 || i < j then invalidArg (nameof randomizer) "…"
+            let temp = array[i]
+            array[i] <- array[j]
+            array[j] <- temp
+
+        array
+
+    [<CompiledName("Choice")>]
+    let choice randomizer (array: 'T array) =
+        checkNonNull (nameof array) array
+
+        if array.Length = 0 then
+            invalidArg (nameof array) LanguagePrimitives.ErrorStrings.InputArrayEmptyString
+
+        let i = randomizer array.Length
+
+        if i < 0 then
+            invalidArg (nameof randomizer) "…"
+
+        if array.Length <= i then
+            invalidArg (nameof randomizer) "…"
+
+        array[i]
+
+    [<CompiledName("Choices")>]
+    let inline choices ([<InlineIfLambda>] randomizer) count (array: 'T array) =
+        checkNonNull (nameof array) array
+
+        if count < 0 then
+            invalidArgInputMustBeNonNegative (nameof count) count
+
+        if array.Length < count then
+            invalidArgOutOfRange (nameof count) count "array.Length" array.Length
+
+        if array.Length = 0 then
+            invalidArg (nameof array) LanguagePrimitives.ErrorStrings.InputArrayEmptyString
+
+        [|
+            for _ in 1 .. count do
+                let i = randomizer array.Length
+
+                if i < 0 then
+                    invalidArg (nameof randomizer) "…"
+
+                if array.Length <= i then
+                    invalidArg (nameof randomizer) "…"
+
+                yield array[i]
+        |]
+
+    [<CompiledName("Sample")>]
+    let inline sample ([<InlineIfLambda>] randomizer) count (array: 'T array) =
+        checkNonNull (nameof array) array
+
+        if count < 0 then
+            invalidArgInputMustBeNonNegative (nameof count) count
+
+        if array.Length = 0 then
+            invalidArg (nameof array) LanguagePrimitives.ErrorStrings.InputArrayEmptyString
+
+        let seen = HashSet()
+
+        [|
+            for _ in 0 .. count do
+                let rec nextInt () =
+                    let i = randomizer array.Length
+
+                    if i < 0 then
+                        invalidArg (nameof randomizer) "…"
+
+                    if array.Length <= i then
+                        invalidArg (nameof randomizer) "…"
+
+                    if seen.Add i then i else nextInt ()
+
+                let i = nextInt ()
+
+                yield array[i]
+        |]
+
     module Parallel =
         open System.Threading
         open System.Threading.Tasks

@@ -97,6 +97,12 @@
     <Compile Include="local.fs">
       <Link>Collections/local.fs</Link>
     </Compile>
+    <Compile Include="random.fsi">
+      <Link>Random/random.fsi</Link>
+    </Compile>
+    <Compile Include="random.fs">
+      <Link>Random/random.fs</Link>
+    </Compile>
     <Compile Include="array2.fsi">
       <Link>Collections/array2.fsi</Link>
     </Compile>
