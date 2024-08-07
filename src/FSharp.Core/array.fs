@@ -2208,9 +2208,12 @@ module Array =
         [<CompiledName("TryPick")>]
         let tryPick chooser (array: _ array) =
             checkNonNull "array" array
-            let allChosen = System.Collections.Concurrent.ConcurrentDictionary()
 
-            let pResult =
+            let syncRoot = obj()
+            let mutable lo = Int32.MaxValue
+            let mutable chosen = None
+
+            let _pResult =
                 Parallel.For(
                     0,
                     array.Length,
@@ -2218,12 +2221,13 @@ module Array =
                         match chooser array[i] with
                         | None -> ()
                         | chosenElement ->
-                            allChosen[i] <- chosenElement
-                            pState.Break())
-                )
+                            lock syncRoot (fun () ->
+                                if i < lo then
+                                    lo <- i
+                                    chosen <- chosenElement)
+                            pState.Break()))
 
-            if pResult.LowestBreakIteration.HasValue then allChosen[int (pResult.LowestBreakIteration.GetValueOrDefault())]
-            else None
+            chosen
 
         [<CompiledName("Choose")>]
         let choose chooser (array: 'T array) =
