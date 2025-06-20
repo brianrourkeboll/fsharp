@@ -80,7 +80,7 @@ let parse_error_rich = Some(fun (ctxt: ParseErrorContext<_>) ->
 %token <string> PERCENT_OP BINDER
 %token <string * bool> LQUOTE RQUOTE RQUOTE_DOT RQUOTE_BAR_RBRACE
 %token BAR_BAR UPCAST DOWNCAST NULL RESERVED MODULE NAMESPACE DELEGATE CONSTRAINT BASE
-%token AND AS ASSERT OASSERT ASR BEGIN DO DONE DOWNTO ELSE ELIF END DOT_DOT DOT_DOT_HAT
+%token AND AS ASSERT OASSERT ASR BEGIN DO DONE DOWNTO ELSE ELIF END DOT_DOT_DOT DOT_DOT DOT_DOT_HAT
 %token EXCEPTION FALSE FOR FUN FUNCTION IF IN JOIN_IN FINALLY DO_BANG
 %token LAZY OLAZY MATCH MATCH_BANG MUTABLE NEW OF
 %token OPEN OR REC THEN TO TRUE TRY TYPE VAL INLINE INTERFACE INSTANCE CONST
@@ -2157,6 +2157,9 @@ classDefnMember:
        let leadingKeyword = SynTypeDefnLeadingKeyword.StaticType(rhs parseState 3, rhs parseState 4)
        [ SynMemberDefn.NestedType($5 leadingKeyword, None, rhs2 parseState 1 5) ] }
 
+  | DOT_DOT_DOT typ
+    { let m = rhs2 parseState 1 2
+      [ SynMemberDefn.Spread (SynSpread.SynTypeSpread (rhs parseState 1, $2, None, m), m) ] }
 
 /* A 'val' definition in an object type definition */
 valDefnDecl:
@@ -2945,7 +2948,8 @@ unionCaseReprElement:
 unionCaseRepr:
   | braceFieldDeclList
      { errorR(Deprecated(FSComp.SR.parsConsiderUsingSeparateRecordType(), lhs parseState))
-       $1, rhs parseState 1 }
+       let fields = $1 |> List.choose (function SynFieldOrSpread.SynField field -> Some field | _ -> None)
+       fields, rhs parseState 1 }
 
   | unionCaseReprElements
      { $1 }
@@ -2966,7 +2970,11 @@ recdFieldDecl:
        let (SynField (a, b, c, d, e, xmlDoc, vis, mWhole, trivia)) = fld
        if Option.isSome vis then errorR (Error (FSComp.SR.parsRecordFieldsCannotHaveVisibilityDeclarations (), rhs parseState 2))
        let mWhole = unionRangeWithXmlDoc xmlDoc mWhole
-       SynField (a, b, c, d, e, xmlDoc, None, mWhole, trivia) }
+       SynFieldOrSpread.SynField (SynField (a, b, c, d, e, xmlDoc, None, mWhole, trivia)) }
+
+  | DOT_DOT_DOT typ
+    { let m = rhs2 parseState 1 2
+      SynFieldOrSpread.SynSpread (SynSpread.SynTypeSpread (rhs parseState 1, $2, None, m)) }
 
 /* Part of a field or val declaration in a record type or object type */
 fieldDecl:
@@ -6489,7 +6497,7 @@ atomTypeOrAnonRecdType:
      { let flds, isStruct = $1
        let flds2 =
            flds |> List.choose (function
-             | (SynField([], false, Some id, ty, false, _xmldoc, None, _m, _trivia)) -> Some(id, ty)
+             | SynFieldOrSpread.SynField (SynField([], false, Some id, ty, false, _xmldoc, None, _m, _trivia)) -> Some(id, ty)
              | _ -> reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsInvalidAnonRecdType()); None)
        SynType.AnonRecd(isStruct, flds2, rhs parseState 1) }
 

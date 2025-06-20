@@ -110,10 +110,10 @@ type SyntaxVisitorBase<'T>() =
         None
 
     /// VisitRecordDefn allows overriding behavior when visiting record definitions (by default do nothing)
-    abstract VisitRecordDefn: path: SyntaxVisitorPath * fields: SynField list * range -> 'T option
+    abstract VisitRecordDefn: path: SyntaxVisitorPath * fieldsOrSpreads: SynFieldOrSpread list * range -> 'T option
 
-    default _.VisitRecordDefn(path, fields, range) =
-        ignore (path, fields, range)
+    default _.VisitRecordDefn(path, fieldsOrSpreads, range) =
+        ignore (path, fieldsOrSpreads, range)
         None
 
     /// VisitUnionDefn allows overriding behavior when visiting union definitions (by default do nothing)
@@ -906,10 +906,12 @@ module SyntaxTraversal =
                     ]
                     |> pick tRange tydef
 
-        and traverseRecordDefn path fields m =
-            fields
-            |> List.tryPick (fun (SynField(attributes = attributes)) -> attributeApplicationDives path attributes |> pick m attributes)
-            |> Option.orElseWith (fun () -> visitor.VisitRecordDefn(path, fields, m))
+        and traverseRecordDefn path fieldsOrSpreads m =
+            fieldsOrSpreads
+            |> List.tryPick (function
+                | SynFieldOrSpread.SynField (SynField(attributes = attributes)) -> attributeApplicationDives path attributes |> pick m attributes
+                | SynFieldOrSpread.SynSpread _ -> None) // TODO.
+            |> Option.orElseWith (fun () -> visitor.VisitRecordDefn(path, fieldsOrSpreads, m))
 
         and traverseEnumDefn path cases m =
             cases
@@ -990,6 +992,8 @@ module SyntaxTraversal =
             | SynMemberDefn.Inherit(None, _, _, _) -> None
             | SynMemberDefn.ValField _ -> None
             | SynMemberDefn.NestedType(synTypeDefn, _synAccessOption, _range) -> traverseSynTypeDefn path synTypeDefn
+            | SynMemberDefn.Spread(SynSpread.SynExprSpread(expr = expr), _) -> traverseSynExpr path expr
+            | SynMemberDefn.Spread(SynSpread.SynTypeSpread(ty = ty), _) -> traverseSynType path ty
 
         and traverseSynMatchClause origPath mc =
             let defaultTraverse mc =
@@ -1157,7 +1161,9 @@ module SyntaxTraversal =
 module SyntaxNode =
     let (|Attributes|) node =
         let (|All|) = List.collect
-        let field (SynField(attributes = attributes)) = attributes
+        let fieldOrSpread = function
+            | SynFieldOrSpread.SynField (SynField(attributes = attributes)) -> attributes
+            | SynFieldOrSpread.SynSpread _ -> []
         let unionCase (SynUnionCase(attributes = attributes)) = attributes
         let enumCase (SynEnumCase(attributes = attributes)) = attributes
         let typar (SynTyparDecl(attributes = attributes)) = attributes
@@ -1183,7 +1189,7 @@ module SyntaxNode =
         | SyntaxNode.SynModule(SynModuleDecl.Attributes(attributes = attributes))
         | SyntaxNode.SynTypeDefn(SynTypeDefn(typeInfo = SynComponentInfo attributes))
         | SyntaxNode.SynTypeDefn(SynTypeDefn(
-            typeRepr = SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Record(recordFields = All field attributes), _)))
+            typeRepr = SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Record(recordFieldsOrSpreads = All fieldOrSpread attributes), _)))
         | SyntaxNode.SynTypeDefn(SynTypeDefn(
             typeRepr = SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Union(unionCases = All unionCase attributes), _)))
         | SyntaxNode.SynTypeDefn(SynTypeDefn(

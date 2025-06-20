@@ -1183,3 +1183,15 @@ let addEmptyMatchClause (mBar1: range) (mBar2: range) (clauses: SynMatchClause l
     | SynMatchClause(pat, whenExpr, resultExpr, range, debugPoint, trivia) :: restClauses ->
         SynMatchClause(addOrPat pat, whenExpr, resultExpr, range, debugPoint, trivia)
         :: restClauses
+
+let (|SynFields|) (synFieldsOrSpreads: SynFieldOrSpread list) =
+    synFieldsOrSpreads
+    |> List.choose (function
+        | SynFieldOrSpread.SynField field -> Some field
+        | SynFieldOrSpread.SynSpread _ -> None)
+
+let (|SynSpreads|) (synFieldsOrSpreads: SynFieldOrSpread list) =
+    synFieldsOrSpreads
+    |> List.choose (function
+        | SynFieldOrSpread.SynField _ -> None
+        | SynFieldOrSpread.SynSpread spread -> Some spread)

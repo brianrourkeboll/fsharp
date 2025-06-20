@@ -2049,6 +2049,8 @@ let TcMutRecDefns_Phase2 (cenv: cenv) envInitial mBinds scopem mutRecNSInfo (env
             // Interfaces exist in the member list - handled above in interfaceMembersFromTypeDefn 
             | SynMemberDefn.Interface _ -> ()
 
+            | SynMemberDefn.Spread _ -> ()
+
             // The following should have been List.unzip out already in SplitTyconDefn 
             | SynMemberDefn.AbstractSlot _
             | SynMemberDefn.ValField _             
@@ -2656,7 +2658,7 @@ module EstablishTypeDefinitionCores =
                           errorR(Error(FSComp.SR.tcStructsMustDeclareTypesOfImplicitCtorArgsExplicitly(), m))   
                       yield (ty, m)
 
-          | SynTypeDefnSimpleRepr.Record (_, fields, _) -> 
+          | SynTypeDefnSimpleRepr.Record (_, SynFields fields, _) -> 
               for SynField(fieldType = ty; range = m) in fields do 
                   let tyR, _ = TcTypeAndRecover cenv NoNewTypars NoCheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes env tpenv ty
                   yield (tyR, m)
@@ -3585,15 +3587,34 @@ module EstablishTypeDefinitionCores =
                     let repr = Construct.MakeUnionRepr unionCases
                     repr, None, NoSafeInitInfo
 
-                | SynTypeDefnSimpleRepr.Record (_, fields, mRepr) -> 
+                | SynTypeDefnSimpleRepr.Record (_, SynFields fields & SynSpreads spreads & allFields, mRepr) -> 
                     noMeasureAttributeCheck()
                     noSealedAttributeCheck FSComp.SR.tcTypesAreAlwaysSealedRecord
                     noAbstractClassAttributeCheck()
                     noAllowNullLiteralAttributeCheck()
                     structLayoutAttributeCheck true  // these are allowed for records
+
+                    let unionedFields =
+                        (Map.empty, allFields)
+                        ||> List.fold (fun acc fieldOrSpread ->
+                            match fieldOrSpread with
+                            | SynFieldOrSpread.SynField(SynField(idOpt = Some id)) ->
+                        )
+
+                    let extraFields =
+                        spreads
+                        |> List.collect (function
+                            | SynSpread.SynTypeSpread (ty=ty) ->
+                                let ty, _ = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
+                                ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false 
+                                |> List.choose (function Item.RecdField fieldInfo -> Some fieldInfo.RecdField | _ -> None)
+                            | _ -> [])
+
+
                     let recdFields = TcRecdUnionAndEnumDeclarations.TcNamedFieldDecls cenv envinner innerParent false tpenv fields
-                    recdFields |> CheckDuplicates (fun f -> f.Id) "field" |> ignore
-                    writeFakeRecordFieldsToSink recdFields
+                    let allFields = extraFields @ recdFields
+                    allFields |> CheckDuplicates (fun f -> f.Id) "field" |> ignore
+                    writeFakeRecordFieldsToSink allFields
                     CallEnvSink cenv.tcSink (mRepr, envinner.NameEnv, ad)
 
                     let data =
@@ -3601,7 +3622,7 @@ module EstablishTypeDefinitionCores =
                             fsobjmodel_cases = Construct.MakeUnionCases []
                             fsobjmodel_kind = TFSharpRecord
                             fsobjmodel_vslots = []
-                            fsobjmodel_rfields = Construct.MakeRecdFieldsTable recdFields
+                            fsobjmodel_rfields = Construct.MakeRecdFieldsTable allFields
                         }
 
                     let repr = TFSharpTyconRepr data
@@ -4401,7 +4422,8 @@ module TcDeclarations =
                 // covered above 
                 | SynMemberDefn.ValField _   
                 | SynMemberDefn.Inherit _ 
-                | SynMemberDefn.AbstractSlot _ -> false)
+                | SynMemberDefn.AbstractSlot _
+                | SynMemberDefn.Spread _ -> false)
 
         // Convert auto properties to let bindings in the pre-list
         let rec preAutoProps memb =

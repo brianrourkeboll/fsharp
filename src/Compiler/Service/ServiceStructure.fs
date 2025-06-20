@@ -626,7 +626,7 @@ module Structure =
                     rcheck Scope.EnumCase Collapse.Below cr cr
                     parseAttributes attrs
 
-            | SynTypeDefnSimpleRepr.Record(_, fields, rr) ->
+            | SynTypeDefnSimpleRepr.Record(_, SynFields fields, rr) ->
                 rcheck Scope.RecordDefn Collapse.Same rr rr
 
                 for SynField(attributes = attrs; range = fr) in fields do

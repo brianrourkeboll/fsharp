@@ -126,7 +126,7 @@ let visitSynTypeDefn
             match simpleRepr with
             | SynTypeDefnSimpleRepr.Union(unionCases = unionCases) -> yield! List.collect visitSynUnionCase unionCases
             | SynTypeDefnSimpleRepr.Enum(cases = cases) -> yield! List.collect visitSynEnumCase cases
-            | SynTypeDefnSimpleRepr.Record(recordFields = recordFields) -> yield! List.collect visitSynField recordFields
+            | SynTypeDefnSimpleRepr.Record(recordFieldsOrSpreads = SynFields recordFields) -> yield! List.collect visitSynField recordFields
             // This is only used in the typed tree
             // The parser doesn't construct this
             | SynTypeDefnSimpleRepr.General _
@@ -167,7 +167,7 @@ let visitSynTypeDefnSig
             match simpleRepr with
             | SynTypeDefnSimpleRepr.Union(unionCases = unionCases) -> yield! List.collect visitSynUnionCase unionCases
             | SynTypeDefnSimpleRepr.Enum(cases = cases) -> yield! List.collect visitSynEnumCase cases
-            | SynTypeDefnSimpleRepr.Record(recordFields = recordFields) -> yield! List.collect visitSynField recordFields
+            | SynTypeDefnSimpleRepr.Record(recordFieldsOrSpreads = SynFields recordFields) -> yield! List.collect visitSynField recordFields
             // This is only used in the typed tree
             // The parser doesn't construct this
             | SynTypeDefnSimpleRepr.General _
@@ -228,6 +228,8 @@ let visitSynMemberDefn (md: SynMemberDefn) : FileContentEntry list =
             yield! visitSynAttributes attributes
             yield! collectFromOption visitSynType typeOpt
             yield! visitSynExpr synExpr
+
+        | SynMemberDefn.Spread _ -> ()
     ]
 
 let visitSynInterfaceImpl (SynInterfaceImpl(interfaceTy = t; bindings = bindings; members = members)) =

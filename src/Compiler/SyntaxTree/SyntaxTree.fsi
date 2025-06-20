@@ -976,6 +976,63 @@ type SynExpr =
     /// Indicates if this expression arises from error recovery
     member IsArbExprAndThusAlreadyReportedError: bool
 
+/// Represents a spread expression.
+///
+/// ...expr
+///
+/// ...expr without A; B; C
+///
+/// ...expr1 without ...expr2
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynSpread =
+    | SynExprSpread of
+        spreadRange: range *
+        expr: SynExpr *
+        without: SynExprWithout option *
+        range: range
+
+    | SynTypeSpread of
+        spreadRange: range *
+        ty: SynType *
+        without: SynTypeWithout option *
+        range: range
+
+/// Represents the optional without component of a spread expression.
+///
+/// ...expr without A; B; C
+///
+/// ...expr1 without ...expr2
+[<NoEquality; NoComparison>]
+type SynExprWithout =
+    | SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
+
+/// Represents either a spread expression or a member identifier.
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynExprSpreadOrIdent =
+    /// Represents a spread expression in the without component of an outer spread expression.
+    | SynExprSpread of spread: SynSpread * separator: range option
+
+    /// Represents a member identifier in the without component of a spread expression.
+    | SynExprIdent of ident: Ident * separator: range option
+
+/// Represents the optional without component of a type spread.
+///
+/// ...Ty without A; B; C
+///
+/// ...Ty1 without ...Ty2
+[<NoEquality; NoComparison>]
+type SynTypeWithout =
+    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
+
+/// Represents either a type spread or a member identifier.
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynTypeSpreadOrLongIdent =
+    /// Represents a type spread in the without component of an outer type spread.
+    | SynTypeSpread of spread: SynSpread * separator: range option
+
+    /// Represents a member identifier in the without component of a type spread.
+    | SynTypeLongIdent of longIdent: SynLongIdent * separator: range option
+
 [<NoEquality; NoComparison>]
 type SynExprAndBang =
     | SynExprAndBang of
@@ -1359,7 +1416,7 @@ type SynTypeDefnSimpleRepr =
     | Enum of cases: SynEnumCase list * range: range
 
     /// A record type definition, type X = { A: int; B: int }
-    | Record of accessibility: SynAccess option * recordFields: SynField list * range: range
+    | Record of accessibility: SynAccess option * recordFieldsOrSpreads: SynFieldOrSpread list * range: range
 
     /// An object oriented type definition. This is not a parse-tree form, but represents the core
     /// type representation which the type checker splits out from the "ObjectModel" cases of type definitions.
@@ -1391,6 +1448,11 @@ type SynTypeDefnSimpleRepr =
 
     /// Gets the syntax range of this construct
     member Range: range
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynFieldOrSpread =
+    | SynField of field: SynField
+    | SynSpread of spread: SynSpread
 
 /// Represents the syntax tree for one case in an enum definition.
 [<NoEquality; NoComparison>]
@@ -1703,6 +1765,8 @@ type SynMemberDefn =
         synExpr: SynExpr *
         range: range *
         trivia: SynMemberDefnAutoPropertyTrivia
+
+    | Spread of spread: SynSpread * range: range
 
     /// Gets the syntax range of this construct
     member Range: range

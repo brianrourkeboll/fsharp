@@ -951,7 +951,7 @@ module ParsedInput =
             match synTypeDefn with
             | SynTypeDefnSimpleRepr.Enum(cases, _) -> List.tryPick walkEnumCase cases
             | SynTypeDefnSimpleRepr.Union(_, cases, _) -> List.tryPick walkUnionCase cases
-            | SynTypeDefnSimpleRepr.Record(_, fields, _) -> List.tryPick walkField fields
+            | SynTypeDefnSimpleRepr.Record(_, SynFields fields, _) -> List.tryPick walkField fields // TODO: also do spreads, in the right order.
             | SynTypeDefnSimpleRepr.TypeAbbrev(_, t, _) -> walkType t
             | _ -> None
 
@@ -1775,7 +1775,7 @@ module ParsedInput =
                     | SynType.LongIdent _ when rangeContainsPos ty.Range pos -> Some CompletionContext.Type
                     | _ -> defaultTraverse ty
 
-                member _.VisitRecordDefn(_, fields, range) =
+                member _.VisitRecordDefn(_, SynFields fields, range) =
                     fields
                     |> List.tryPick (fun (SynField(idOpt = idOpt; range = fieldRange; fieldType = fieldType)) ->
                         match idOpt, fieldType with
@@ -2275,7 +2275,7 @@ module ParsedInput =
             match typeDefn with
             | SynTypeDefnSimpleRepr.Enum(cases, _) -> List.iter walkEnumCase cases
             | SynTypeDefnSimpleRepr.Union(_, cases, _) -> List.iter walkUnionCase cases
-            | SynTypeDefnSimpleRepr.Record(_, fields, _) -> List.iter walkField fields
+            | SynTypeDefnSimpleRepr.Record(_, SynFields fields, _) -> List.iter walkField fields // TODO.
             | SynTypeDefnSimpleRepr.TypeAbbrev(_, t, _) -> walkType t
             | _ -> ()
 

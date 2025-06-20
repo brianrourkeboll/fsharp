@@ -871,6 +871,38 @@ type SynExpr =
         | SynExpr.ArbitraryAfterError _ -> true
         | _ -> false
 
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynSpread =
+    | SynExprSpread of
+        spreadRange: range *
+        expr: SynExpr *
+        without: SynExprWithout option *
+        range: range
+
+    | SynTypeSpread of
+        spreadRange: range *
+        ty: SynType *
+        without: SynTypeWithout option *
+        range: range
+
+[<NoEquality; NoComparison>]
+type SynExprWithout =
+    | SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynExprSpreadOrIdent =
+    | SynExprSpread of spread: SynSpread * separator: range option
+    | SynExprIdent of ident: Ident * separator: range option
+
+[<NoEquality; NoComparison>]
+type SynTypeWithout =
+    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynTypeSpreadOrLongIdent =
+    | SynTypeSpread of spread: SynSpread * separator: range option
+    | SynTypeLongIdent of longIdent: SynLongIdent * separator: range option
+
 [<NoEquality; NoComparison>]
 type SynExprAndBang =
     | SynExprAndBang of
@@ -1223,7 +1255,7 @@ type SynTypeDefnSimpleRepr =
 
     | Enum of cases: SynEnumCase list * range: range
 
-    | Record of accessibility: SynAccess option * recordFields: SynField list * range: range
+    | Record of accessibility: SynAccess option * recordFieldsOrSpreads: SynFieldOrSpread list * range: range
 
     | General of
         kind: SynTypeDefnKind *
@@ -1255,6 +1287,11 @@ type SynTypeDefnSimpleRepr =
         | TypeAbbrev(range = m)
         | None(range = m) -> m
         | Exception t -> t.Range
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynFieldOrSpread =
+    | SynField of field: SynField
+    | SynSpread of spread: SynSpread
 
 [<NoEquality; NoComparison>]
 type SynEnumCase =
@@ -1538,6 +1575,8 @@ type SynMemberDefn =
         range: range *
         trivia: SynMemberDefnAutoPropertyTrivia
 
+    | Spread of spread: SynSpread * range: range
+
     member d.Range =
         match d with
         | SynMemberDefn.Member(range = m)
@@ -1551,7 +1590,8 @@ type SynMemberDefn =
         | SynMemberDefn.Inherit(range = m)
         | SynMemberDefn.ValField(range = m)
         | SynMemberDefn.AutoProperty(range = m)
-        | SynMemberDefn.NestedType(range = m) -> m
+        | SynMemberDefn.NestedType(range = m)
+        | SynMemberDefn.Spread(range = m) -> m
 
 type SynMemberDefns = SynMemberDefn list
 
