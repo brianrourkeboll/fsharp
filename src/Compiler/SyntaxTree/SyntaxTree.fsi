@@ -993,12 +993,7 @@ type SynSpread =
 ///
 /// type Ty2 = { ...Ty1 }
 [<NoEquality; NoComparison>]
-type SynTypeSpread =
-    | SynTypeSpread of
-        spreadRange: range *
-        ty: SynType *
-        without: SynTypeWithout option *
-        range: range
+type SynTypeSpread = SynTypeSpread of spreadRange: range * ty: SynType * without: SynTypeWithout option * range: range
 
 /// Represents the optional without component of a type spread.
 ///
@@ -1006,8 +1001,7 @@ type SynTypeSpread =
 ///
 /// ...Ty1 without ...Ty2
 [<NoEquality; NoComparison>]
-type SynTypeWithout =
-    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
+type SynTypeWithout = SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
 
 /// Represents either a type spread or a member identifier.
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
@@ -1026,12 +1020,7 @@ type SynTypeSpreadOrLongIdent =
 ///
 /// ...expr1 without ...expr2
 [<NoEquality; NoComparison>]
-type SynExprSpread =
-    | SynExprSpread of
-        spreadRange: range *
-        expr: SynExpr *
-        without: SynExprWithout option *
-        range: range
+type SynExprSpread = SynExprSpread of spreadRange: range * expr: SynExpr * without: SynExprWithout option * range: range
 
 /// Represents the optional without component of a spread expression.
 ///
@@ -1039,8 +1028,7 @@ type SynExprSpread =
 ///
 /// ...expr1 without ...expr2
 [<NoEquality; NoComparison>]
-type SynExprWithout =
-    | SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
+type SynExprWithout = SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
 
 /// Represents either a spread expression or a member identifier.
 [<NoEquality; NoComparison; RequireQualifiedAccess>]

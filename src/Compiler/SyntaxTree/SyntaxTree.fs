@@ -877,16 +877,10 @@ type SynSpread =
     | SynExprSpread of SynExprSpread
 
 [<NoEquality; NoComparison>]
-type SynTypeSpread =
-    | SynTypeSpread of
-        spreadRange: range *
-        ty: SynType *
-        without: SynTypeWithout option *
-        range: range
+type SynTypeSpread = SynTypeSpread of spreadRange: range * ty: SynType * without: SynTypeWithout option * range: range
 
 [<NoEquality; NoComparison>]
-type SynTypeWithout =
-    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
+type SynTypeWithout = SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynTypeSpreadOrLongIdent =
@@ -894,16 +888,10 @@ type SynTypeSpreadOrLongIdent =
     | SynTypeLongIdent of longIdent: SynLongIdent * separator: range option
 
 [<NoEquality; NoComparison>]
-type SynExprSpread =
-    | SynExprSpread of
-        spreadRange: range *
-        expr: SynExpr *
-        without: SynExprWithout option *
-        range: range
+type SynExprSpread = SynExprSpread of spreadRange: range * expr: SynExpr * without: SynExprWithout option * range: range
 
 [<NoEquality; NoComparison>]
-type SynExprWithout =
-    | SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
+type SynExprWithout = SynExprWithout of withoutKeywordRange: range * without: SynExprSpreadOrIdent list
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprSpreadOrIdent =

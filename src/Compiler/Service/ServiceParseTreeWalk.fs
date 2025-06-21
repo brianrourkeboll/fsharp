@@ -909,7 +909,8 @@ module SyntaxTraversal =
         and traverseRecordDefn path fieldsOrSpreads m =
             fieldsOrSpreads
             |> List.tryPick (function
-                | SynFieldOrSpread.SynField (SynField(attributes = attributes)) -> attributeApplicationDives path attributes |> pick m attributes
+                | SynFieldOrSpread.SynField(SynField(attributes = attributes)) ->
+                    attributeApplicationDives path attributes |> pick m attributes
                 | SynFieldOrSpread.SynSpread _ -> None) // TODO.
             |> Option.orElseWith (fun () -> visitor.VisitRecordDefn(path, fieldsOrSpreads, m))
 
@@ -1161,9 +1162,12 @@ module SyntaxTraversal =
 module SyntaxNode =
     let (|Attributes|) node =
         let (|All|) = List.collect
-        let fieldOrSpread = function
-            | SynFieldOrSpread.SynField (SynField(attributes = attributes)) -> attributes
+
+        let fieldOrSpread =
+            function
+            | SynFieldOrSpread.SynField(SynField(attributes = attributes)) -> attributes
             | SynFieldOrSpread.SynSpread _ -> []
+
         let unionCase (SynUnionCase(attributes = attributes)) = attributes
         let enumCase (SynEnumCase(attributes = attributes)) = attributes
         let typar (SynTyparDecl(attributes = attributes)) = attributes
