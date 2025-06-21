@@ -3598,7 +3598,7 @@ module EstablishTypeDefinitionCores =
                     let recdFields =
                         fieldsAndSpreads
                         |> List.collect (function
-                            | SynFieldOrSpread.SynSpread (SynSpread.SynTypeSpread (ty=ty; range=spreadRange)) ->
+                            | SynFieldOrSpread.SynSpread (SynTypeSpread (ty=ty; range=spreadRange)) ->
                                 let ty, _ = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
                                 ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false
                                 |> List.choose (function
@@ -3608,13 +3608,13 @@ module EstablishTypeDefinitionCores =
                                         idRanges.Add (key, syntheticId)
                                         Some fieldInfo.RecdField
                                     | _ -> None)
+
                             | SynFieldOrSpread.SynField synField ->
                                 match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
                                 | Some recdField ->
                                     idRanges.Add (struct (recdField.Id.idText, recdField.Id.idRange), recdField.Id)
                                     [recdField]
-                                | None -> []
-                            | _ -> [])
+                                | None -> [])
 
                     idRanges.Values |> List.ofSeq |> CheckDuplicates (fun id -> id) "field" |> ignore
                     writeFakeRecordFieldsToSink recdFields

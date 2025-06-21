@@ -873,16 +873,32 @@ type SynExpr =
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynSpread =
-    | SynExprSpread of
-        spreadRange: range *
-        expr: SynExpr *
-        without: SynExprWithout option *
-        range: range
+    | SynTypeSpread of SynTypeSpread
+    | SynExprSpread of SynExprSpread
 
+[<NoEquality; NoComparison>]
+type SynTypeSpread =
     | SynTypeSpread of
         spreadRange: range *
         ty: SynType *
         without: SynTypeWithout option *
+        range: range
+
+[<NoEquality; NoComparison>]
+type SynTypeWithout =
+    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynTypeSpreadOrLongIdent =
+    | SynTypeSpread of spread: SynTypeSpread * separator: range option
+    | SynTypeLongIdent of longIdent: SynLongIdent * separator: range option
+
+[<NoEquality; NoComparison>]
+type SynExprSpread =
+    | SynExprSpread of
+        spreadRange: range *
+        expr: SynExpr *
+        without: SynExprWithout option *
         range: range
 
 [<NoEquality; NoComparison>]
@@ -891,17 +907,8 @@ type SynExprWithout =
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprSpreadOrIdent =
-    | SynExprSpread of spread: SynSpread * separator: range option
+    | SynExprSpread of spread: SynExprSpread * separator: range option
     | SynExprIdent of ident: Ident * separator: range option
-
-[<NoEquality; NoComparison>]
-type SynTypeWithout =
-    | SynTypeWithout of withoutKeywordRange: range * without: SynTypeSpreadOrLongIdent list
-
-[<NoEquality; NoComparison; RequireQualifiedAccess>]
-type SynTypeSpreadOrLongIdent =
-    | SynTypeSpread of spread: SynSpread * separator: range option
-    | SynTypeLongIdent of longIdent: SynLongIdent * separator: range option
 
 [<NoEquality; NoComparison>]
 type SynExprAndBang =
@@ -930,6 +937,11 @@ type SynExprRecordField =
         expr: SynExpr option *
         range: range *
         blockSeparator: BlockSeparator option
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynExprRecordFieldOrSpread =
+    | SynExprRecordField of field: SynExprRecordField
+    | SynExprSpread of spread: SynExprSpread
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =
@@ -1291,7 +1303,7 @@ type SynTypeDefnSimpleRepr =
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynFieldOrSpread =
     | SynField of field: SynField
-    | SynSpread of spread: SynSpread
+    | SynSpread of spread: SynTypeSpread
 
 [<NoEquality; NoComparison>]
 type SynEnumCase =
