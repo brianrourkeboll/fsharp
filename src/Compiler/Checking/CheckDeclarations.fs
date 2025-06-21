@@ -3587,34 +3587,37 @@ module EstablishTypeDefinitionCores =
                     let repr = Construct.MakeUnionRepr unionCases
                     repr, None, NoSafeInitInfo
 
-                | SynTypeDefnSimpleRepr.Record (_, SynFields fields & SynSpreads spreads & allFields, mRepr) -> 
+                | SynTypeDefnSimpleRepr.Record (_, fieldsAndSpreads, mRepr) -> 
                     noMeasureAttributeCheck()
                     noSealedAttributeCheck FSComp.SR.tcTypesAreAlwaysSealedRecord
                     noAbstractClassAttributeCheck()
                     noAllowNullLiteralAttributeCheck()
                     structLayoutAttributeCheck true  // these are allowed for records
 
-                    let unionedFields =
-                        (Map.empty, allFields)
-                        ||> List.fold (fun acc fieldOrSpread ->
-                            match fieldOrSpread with
-                            | SynFieldOrSpread.SynField(SynField(idOpt = Some id)) ->
-                        )
-
-                    let extraFields =
-                        spreads
+                    let idRanges = Dictionary ()
+                    let recdFields =
+                        fieldsAndSpreads
                         |> List.collect (function
-                            | SynSpread.SynTypeSpread (ty=ty) ->
+                            | SynFieldOrSpread.SynSpread (SynSpread.SynTypeSpread (ty=ty; range=spreadRange)) ->
                                 let ty, _ = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
-                                ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false 
-                                |> List.choose (function Item.RecdField fieldInfo -> Some fieldInfo.RecdField | _ -> None)
+                                ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false
+                                |> List.choose (function
+                                    | Item.RecdField fieldInfo ->
+                                        let key = struct (fieldInfo.RecdField.Id.idText, fieldInfo.RecdField.Id.idRange)
+                                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, spreadRange)
+                                        idRanges.Add (key, syntheticId)
+                                        Some fieldInfo.RecdField
+                                    | _ -> None)
+                            | SynFieldOrSpread.SynField synField ->
+                                match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
+                                | Some recdField ->
+                                    idRanges.Add (struct (recdField.Id.idText, recdField.Id.idRange), recdField.Id)
+                                    [recdField]
+                                | None -> []
                             | _ -> [])
 
-
-                    let recdFields = TcRecdUnionAndEnumDeclarations.TcNamedFieldDecls cenv envinner innerParent false tpenv fields
-                    let allFields = extraFields @ recdFields
-                    allFields |> CheckDuplicates (fun f -> f.Id) "field" |> ignore
-                    writeFakeRecordFieldsToSink allFields
+                    idRanges.Values |> List.ofSeq |> CheckDuplicates (fun id -> id) "field" |> ignore
+                    writeFakeRecordFieldsToSink recdFields
                     CallEnvSink cenv.tcSink (mRepr, envinner.NameEnv, ad)
 
                     let data =
@@ -3622,7 +3625,7 @@ module EstablishTypeDefinitionCores =
                             fsobjmodel_cases = Construct.MakeUnionCases []
                             fsobjmodel_kind = TFSharpRecord
                             fsobjmodel_vslots = []
-                            fsobjmodel_rfields = Construct.MakeRecdFieldsTable allFields
+                            fsobjmodel_rfields = Construct.MakeRecdFieldsTable recdFields
                         }
 
                     let repr = TFSharpTyconRepr data
