@@ -395,7 +395,7 @@ let CheckDuplicates (idf: _ -> Ident) k elems =
             let id1 = (idf uc1)
             let id2 = (idf uc2)
             if j > i && id1.idText = id2.idText then 
-                errorR (Duplicate(k, id1.idText, id1.idRange))))
+                errorR (Duplicate(k, id1.idText, id2.idRange))))
     elems
 
 let private CheckDuplicatesArgNames (synVal: SynValSig) m =
