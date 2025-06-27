@@ -2159,7 +2159,7 @@ classDefnMember:
 
   | DOT_DOT_DOT typ
     { let m = rhs2 parseState 1 2
-      [ SynMemberDefn.Spread (SynSpread.SynTypeSpread (rhs parseState 1, $2, None, m), m) ] }
+      [ SynMemberDefn.Spread (SynSpread.SynTypeSpread (SynTypeSpread (rhs parseState 1, $2, None, m)), m) ] }
 
 /* A 'val' definition in an object type definition */
 valDefnDecl:
@@ -2974,7 +2974,7 @@ recdFieldDecl:
 
   | DOT_DOT_DOT typ
     { let m = rhs2 parseState 1 2
-      SynFieldOrSpread.SynSpread (SynSpread.SynTypeSpread (rhs parseState 1, $2, None, m)) }
+      SynFieldOrSpread.SynSpread (SynTypeSpread (rhs parseState 1, $2, None, m)) }
 
 /* Part of a field or val declaration in a record type or object type */
 fieldDecl:
@@ -5631,8 +5631,11 @@ recdExpr:
      { let arg = match $4 with None -> mkSynUnit (lhs parseState) | Some e -> e
        let l = List.rev $5
        let dummyField = mkRecdField (SynLongIdent([], [], [])) // dummy identifier, it will be discarded
-       let l = rebindRanges (dummyField, None, None) l $6
-       let (SynExprRecordField(_, _, _, _, inheritsSep)) = List.head l
+       let l = rebindRanges (RecordFieldNameOrSpread.RecordFieldName (dummyField, None, None)) l $6
+       let inheritsSep =
+            match List.head l with
+            | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField(_, _, _, _, inheritsSep)) -> inheritsSep
+            | _ -> None
        let bindings = List.tail l
        (Some($2, arg, rhs2 parseState 2 4, inheritsSep, rhs parseState 1), None, bindings) }
 
@@ -5647,7 +5650,7 @@ recdExprCore:
             let f = mkRecdField f
             let mEquals = rhs parseState 2
             let l = List.rev $4
-            let l = rebindRanges (f, Some mEquals, Some $3) l $5
+            let l = rebindRanges (RecordFieldNameOrSpread.RecordFieldName (f, Some mEquals, Some $3)) l $5
             (None, l)
        | _ -> raiseParseErrorAt (rhs parseState 2) (FSComp.SR.parsFieldBinding()) }
 
@@ -5656,7 +5659,7 @@ recdExprCore:
        | LongOrSingleIdent(false, (SynLongIdent _ as f), None, m) ->
             let f = mkRecdField f
             let mEquals = rhs parseState 2
-            let l = rebindRanges (f, Some mEquals, None) [] None
+            let l = rebindRanges (RecordFieldNameOrSpread.RecordFieldName (f, Some mEquals, None)) [] None
             None, l
        | _ -> raiseParseErrorAt (rhs parseState 2) (FSComp.SR.parsFieldBinding ()) }
 
@@ -5674,7 +5677,7 @@ recdExprCore:
       reportParseErrorAt m (FSComp.SR.parsUnderscoreInvalidFieldName())
       reportParseErrorAt m (FSComp.SR.parsFieldBinding())
       let f = mkUnderscoreRecdField m
-      (None, [ SynExprRecordField(f, None, None, m, None)  ]) }
+      (None, [ SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField(f, None, None, m, None)) ]) }
 
   | UNDERSCORE EQUALS
     { let m = rhs parseState 1
@@ -5683,14 +5686,14 @@ recdExprCore:
       let mEquals = rhs parseState 2
       reportParseErrorAt (rhs2 parseState 1 2) (FSComp.SR.parsFieldBinding())
 
-      (None, [ SynExprRecordField(f, Some mEquals, None, (rhs2 parseState 1 2), None) ]) }
+      (None, [ SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField(f, Some mEquals, None, (rhs2 parseState 1 2), None)) ]) }
 
   | UNDERSCORE EQUALS declExprBlock recdExprBindings opt_seps_recd
     { reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsUnderscoreInvalidFieldName())
       let f = mkUnderscoreRecdField (rhs parseState 1)
       let mEquals = rhs parseState 2
       let l = List.rev $4
-      let l = rebindRanges (f, Some mEquals, Some $3) l $5
+      let l = rebindRanges (RecordFieldNameOrSpread.RecordFieldName (f, Some mEquals, Some $3)) l $5
       (None, l) }
 
 /* handles case like {x with}  */
@@ -5749,25 +5752,39 @@ recdExprBindings:
 recdBinding:
   | pathOrUnderscore EQUALS declExprBlock
      { let mEquals = rhs parseState 2
-       ($1, Some mEquals, Some $3) }
+       RecordFieldNameOrSpread.RecordFieldName ($1, Some mEquals, Some $3) }
 
   | pathOrUnderscore EQUALS
      { let mEquals = rhs parseState 2
        reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsFieldBinding())
-       ($1, Some mEquals, None) }
+       RecordFieldNameOrSpread.RecordFieldName ($1, Some mEquals, None) }
 
   | pathOrUnderscore EQUALS ends_coming_soon_or_recover
      { let mEquals = rhs parseState 2
        reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsFieldBinding())
-       ($1, Some mEquals, None) }
+       RecordFieldNameOrSpread.RecordFieldName ($1, Some mEquals, None) }
 
   | pathOrUnderscore
      { reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsFieldBinding())
-       ($1, None, None) }
+       RecordFieldNameOrSpread.RecordFieldName ($1, None, None) }
 
   | pathOrUnderscore ends_coming_soon_or_recover
      { reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsFieldBinding())
-       ($1, None, None) }
+       RecordFieldNameOrSpread.RecordFieldName ($1, None, None) }
+
+  | DOT_DOT_DOT appExpr
+     { let mSpread = rhs parseState 1
+       let without = None // TODO.
+       let m = rhs2 parseState 1 2
+       RecordFieldNameOrSpread.Spread (SynExprSpread (mSpread, $2, without, m)) }
+
+  /*
+  | DOT_DOT_DOT
+     { reportParseErrorAt (rhs parseState 1) "TODO: need something after the ... lol"
+       let without = None // TODO.
+       let m = rhs2 parseState 1 2
+       RecordFieldNameOrSpread.Spread (SynExprSpread (mSpread, $2, without, m)) }
+  */
 
 /* There is a minor conflict between
        seq { new ty() }  // sequence expression with one very odd 'action' expression
@@ -5868,9 +5885,10 @@ braceBarExprCore:
      { let orig, flds = $2
        let flds =
            flds |> List.choose (function
-             | SynExprRecordField((synLongIdent, _), mEquals, Some e, _, _) when orig.IsSome -> Some(synLongIdent, mEquals, e) // copy-and-update, long identifier signifies nesting
-             | SynExprRecordField((SynLongIdent([ _id ], _, _) as synLongIdent, _), mEquals, Some e, _, _) -> Some(synLongIdent, mEquals, e) // record construction, long identifier not valid
-             | SynExprRecordField((synLongIdent, _), mEquals, None, _, _) -> Some(synLongIdent, mEquals, arbExpr ("anonField", synLongIdent.Range))
+             | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField((synLongIdent, _), mEquals, Some e, _, _)) when orig.IsSome -> Some(synLongIdent, mEquals, e) // copy-and-update, long identifier signifies nesting
+             | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField((SynLongIdent([ _id ], _, _) as synLongIdent, _), mEquals, Some e, _, _)) -> Some(synLongIdent, mEquals, e) // record construction, long identifier not valid
+             | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField((synLongIdent, _), mEquals, None, _, _)) -> Some(synLongIdent, mEquals, arbExpr ("anonField", synLongIdent.Range))
+             // TODO: Spreads in anon recds.
              | _ -> reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsInvalidAnonRecdType()); None)
        let mLeftBrace = rhs parseState 1
        let mRightBrace = rhs parseState 3
@@ -5882,9 +5900,11 @@ braceBarExprCore:
      { reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsUnmatchedBraceBar())
        let orig, flds = $2
        let flds =
-           flds |> List.map (function
-             | SynExprRecordField((synLongIdent, _), mEquals, Some e, _, _) -> (synLongIdent, mEquals, e)
-             | SynExprRecordField((synLongIdent, _), mEquals, None, _, _) -> (synLongIdent, mEquals, arbExpr ("anonField", synLongIdent.Range)))
+           flds |> List.choose (function
+             | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField((synLongIdent, _), mEquals, Some e, _, _)) -> Some (synLongIdent, mEquals, e)
+             | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField((synLongIdent, _), mEquals, None, _, _)) -> Some (synLongIdent, mEquals, arbExpr ("anonField", synLongIdent.Range))
+             // TODO: Spreads in anon recds.
+             | _ -> reportParseErrorAt (rhs parseState 1) (FSComp.SR.parsInvalidAnonRecdType()); None)
        let mLeftBrace = rhs parseState 1
        let mExpr = rhs parseState 2
        (fun (mStruct: range option) ->

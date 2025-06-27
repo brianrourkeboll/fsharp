@@ -310,6 +310,11 @@ type BlockSeparator = range * pos option
 
 type RecordFieldName = SynLongIdent * bool
 
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type RecordFieldNameOrSpread =
+    | RecordFieldName of name: RecordFieldName * equalsRange: range option * declExpr: SynExpr option
+    | Spread of spread: SynExprSpread
+
 type ExprAtomicFlag =
     | Atomic = 0
     | NonAtomic = 1
@@ -543,7 +548,7 @@ type SynExpr =
     | Record of
         baseInfo: (SynType * SynExpr * range * BlockSeparator option * range) option *
         copyInfo: (SynExpr * BlockSeparator) option *
-        recordFields: SynExprRecordField list *
+        recordFields: SynExprRecordFieldOrSpread list *
         range: range
 
     | New of isProtected: bool * targetType: SynType * expr: SynExpr * range: range
@@ -929,7 +934,7 @@ type SynExprRecordField =
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprRecordFieldOrSpread =
     | SynExprRecordField of field: SynExprRecordField
-    | SynExprSpread of spread: SynExprSpread
+    | SynExprSpread of spread: SynExprSpread * blockSeparator: BlockSeparator option
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =

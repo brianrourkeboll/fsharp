@@ -375,4 +375,4 @@ val addEmptyMatchClause: mBar1: range -> mBar2: range -> clauses: SynMatchClause
 
 val (|SynFields|): synFieldsOrSpreads: SynFieldOrSpread list -> SynField list
 
-val (|SynSpreads|): synFieldsOrSpreads: SynFieldOrSpread list -> SynSpread list
+val (|SynSpreads|): synFieldsOrSpreads: SynFieldOrSpread list -> SynTypeSpread list

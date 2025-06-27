@@ -7747,17 +7747,19 @@ and TcRecdExpr cenv overallTy env tpenv (inherits, withExprOpt, synRecdFields, m
     let fldsList =
         let flds =
             synRecdFields
-            |> List.map (fun (SynExprRecordField (fieldName = (synLongId, isOk); expr = exprBeingAssigned)) ->
-                // if we met at least one field that is not syntactically correct - raise ReportedError to transfer control to the recovery routine
-                if not isOk then
-                    // raising ReportedError None transfers control to the closest errorRecovery point but do not make any records into log
-                    // we assume that parse errors were already reported
-                    raise (ReportedError None)
+            |> List.choose (function
+                | SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField (fieldName = (synLongId, isOk); expr = exprBeingAssigned)) ->
+                    // if we met at least one field that is not syntactically correct - raise ReportedError to transfer control to the recovery routine
+                    if not isOk then
+                        // raising ReportedError None transfers control to the closest errorRecovery point but do not make any records into log
+                        // we assume that parse errors were already reported
+                        raise (ReportedError None)
 
-                match withExprOpt, synLongId.LongIdent, exprBeingAssigned with
-                | _, [ id ], _ -> ([], id), exprBeingAssigned
-                | Some withExpr, lid, Some exprBeingAssigned -> TransformAstForNestedUpdates cenv env overallTy lid exprBeingAssigned withExpr
-                | _ -> List.frontAndBack synLongId.LongIdent, exprBeingAssigned)
+                    match withExprOpt, synLongId.LongIdent, exprBeingAssigned with
+                    | _, [ id ], _ -> Some (([], id), exprBeingAssigned)
+                    | Some withExpr, lid, Some exprBeingAssigned -> Some (TransformAstForNestedUpdates cenv env overallTy lid exprBeingAssigned withExpr)
+                    | _ -> Some (List.frontAndBack synLongId.LongIdent, exprBeingAssigned)
+                | SynExprRecordFieldOrSpread.SynExprSpread _ -> None)
 
         let flds = if hasOrigExpr then GroupUpdatesToNestedFields flds else flds
         // Check if the overall type is an anon record type and if so raise an copy-update syntax error
@@ -9156,7 +9158,9 @@ and TcImplicitOpItemThen (cenv: cenv) overallTy env id sln tpenv mItem delayed =
 
         | SynExpr.Tuple (_, synExprs, _, _)
         | SynExpr.ArrayOrList (_, synExprs, _) -> synExprs |> List.forall isSimpleArgument
-        | SynExpr.Record (copyInfo=copyOpt; recordFields=fields) -> copyOpt |> Option.forall (fst >> isSimpleArgument) && fields |> List.forall ((fun (SynExprRecordField(expr=e)) -> e) >> Option.forall isSimpleArgument)
+        | SynExpr.Record (copyInfo=copyOpt; recordFields=fields) ->
+            copyOpt |> Option.forall (fst >> isSimpleArgument)
+            && fields |> List.forall ((function SynExprRecordFieldOrSpread.SynExprRecordField (SynExprRecordField(expr=e)) -> e | _ -> None) >> Option.forall isSimpleArgument)
         | SynExpr.App (_, _, synExpr, synExpr2, _) -> isSimpleArgument synExpr && isSimpleArgument synExpr2
         | SynExpr.IfThenElse (ifExpr=synExpr; thenExpr=synExpr2; elseExpr=synExprOpt) -> isSimpleArgument synExpr && isSimpleArgument synExpr2 && Option.forall isSimpleArgument synExprOpt
         | SynExpr.DotIndexedGet (synExpr, _, _, _) -> isSimpleArgument synExpr

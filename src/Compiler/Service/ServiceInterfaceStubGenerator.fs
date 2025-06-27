@@ -826,8 +826,8 @@ module InterfaceStubGenerator =
                 | SynMemberDefn.ImplicitCtor _
                 | SynMemberDefn.Inherit _ -> None
                 | SynMemberDefn.ImplicitInherit(_, expr, _, _, _)
-                | SynMemberDefn.Spread(SynSpread.SynExprSpread(expr = expr), _) -> walkExpr expr
-                | SynMemberDefn.Spread(SynSpread.SynTypeSpread _, _) -> None
+                | SynMemberDefn.Spread(SynSpread.SynExprSpread(SynExprSpread(expr = expr)), _) -> walkExpr expr
+                | SynMemberDefn.Spread(SynSpread.SynTypeSpread _, _) -> None // TODO.
 
         and walkBinding (SynBinding(expr = expr)) = walkExpr expr
 
@@ -847,7 +847,11 @@ module InterfaceStubGenerator =
                 | SynExpr.ArrayOrList(_, synExprList, _range) -> List.tryPick walkExpr synExprList
 
                 | SynExpr.Record(_inheritOpt, _copyOpt, fields, _range) ->
-                    List.tryPick (fun (SynExprRecordField(expr = e)) -> Option.bind walkExpr e) fields
+                    List.tryPick
+                        (function
+                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(expr = e)) -> Option.bind walkExpr e
+                        | _ -> None (* TODO. *) )
+                        fields
 
                 | SynExpr.New(_, _synType, synExpr, _range) -> walkExpr synExpr
 

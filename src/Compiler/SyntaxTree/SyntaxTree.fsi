@@ -362,6 +362,12 @@ type BlockSeparator = range * pos option
 /// correct and can be used in name resolution.
 type RecordFieldName = SynLongIdent * bool
 
+/// Represents either a record field name or a spread expression.
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type RecordFieldNameOrSpread =
+    | RecordFieldName of name: RecordFieldName * equalsRange: range option * declExpr: SynExpr option
+    | Spread of spread: SynExprSpread
+
 /// Indicates if an expression is an atomic expression.
 ///
 /// An atomic expression has no whitespace unless enclosed in parentheses, e.g.
@@ -605,7 +611,7 @@ type SynExpr =
     | Record of
         baseInfo: (SynType * SynExpr * range * BlockSeparator option * range) option *
         copyInfo: (SynExpr * BlockSeparator) option *
-        recordFields: SynExprRecordField list *
+        recordFields: SynExprRecordFieldOrSpread list *
         range: range
 
     /// F# syntax: new C(...)
@@ -1071,7 +1077,7 @@ type SynExprRecordField =
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprRecordFieldOrSpread =
     | SynExprRecordField of field: SynExprRecordField
-    | SynExprSpread of spread: SynExprSpread
+    | SynExprSpread of spread: SynExprSpread * blockSeparator: BlockSeparator option
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =

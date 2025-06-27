@@ -821,7 +821,10 @@ module ParsedInput =
             | SynExpr.Record(_, _, fields, r) ->
                 ifPosInRange r (fun _ ->
                     fields
-                    |> List.tryPick (fun (SynExprRecordField(expr = e)) -> e |> Option.bind (walkExprWithKind parentKind)))
+                    |> List.tryPick (function
+                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(expr = e)) ->
+                            e |> Option.bind (walkExprWithKind parentKind)
+                        | _ -> None (* TODO. *) ))
 
             | SynExpr.ObjExpr(objType = ty; bindings = bindings; members = ms; extraImpls = ifaces) ->
                 let bindings = unionBindingAndMembers bindings ms
@@ -1488,7 +1491,10 @@ module ParsedInput =
                         | SyntaxNode.SynExpr(SynExpr.Record(None, _, fields, _)) :: _ ->
                             let isFirstField =
                                 match field, fields with
-                                | Some contextLid, SynExprRecordField(fieldName = lid, _) :: _ -> contextLid.Range = lid.Range
+                                | Some contextLid,
+                                  SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = lid, _)) :: _ ->
+                                    contextLid.Range = lid.Range
+                                // TODO: spreads.
                                 | _ -> false
 
                             RecordContext.New(completionPath, isFirstField)
@@ -2069,9 +2075,13 @@ module ParsedInput =
 
             | SynExpr.Record(recordFields = fields) ->
                 fields
-                |> List.iter (fun (SynExprRecordField(fieldName = (ident, _); expr = e)) ->
-                    addLongIdentWithDots ident
-                    e |> Option.iter walkExpr)
+                |> List.iter (function
+                    | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = (ident, _); expr = e)) ->
+                        addLongIdentWithDots ident
+                        e |> Option.iter walkExpr
+                    | SynExprRecordFieldOrSpread.SynExprSpread _ ->
+                        // TODO.
+                        ())
 
             | SynExpr.Ident ident -> addIdent ident
 

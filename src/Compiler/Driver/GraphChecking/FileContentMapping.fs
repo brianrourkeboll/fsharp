@@ -390,9 +390,14 @@ let visitSynExpr (e: SynExpr) : FileContentEntry list =
         | SynExpr.Record(baseInfo = baseInfo; copyInfo = copyInfo; recordFields = recordFields) ->
             let fieldNodes =
                 [
-                    for SynExprRecordField(fieldName = (si, _); expr = expr) in recordFields do
-                        yield! visitSynLongIdent si
-                        yield! collectFromOption visitSynExpr expr
+                    for fieldOrSpread in recordFields do
+                        match fieldOrSpread with
+                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = (si, _); expr = expr)) ->
+                            yield! visitSynLongIdent si
+                            yield! collectFromOption visitSynExpr expr
+                        | SynExprRecordFieldOrSpread.SynExprSpread _ ->
+                            // TODO.
+                            ()
                 ]
 
             match baseInfo, copyInfo with

@@ -926,7 +926,12 @@ let rec synExprContainsError inpExpr =
             (match origExpr with
              | Some(e, _) -> walkExpr e
              | None -> false)
-            || (let flds = fs |> List.choose (fun (SynExprRecordField(expr = v)) -> v)
+            || (let flds =
+                    fs
+                    |> List.choose (function
+                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(expr = v)) -> v
+                        | SynExprRecordFieldOrSpread.SynExprSpread(SynExprSpread(expr = e), _) -> Some e)
+
                 walkExprs flds)
 
         | SynExpr.ObjExpr(bindings = bs; members = ms; extraImpls = is) ->
