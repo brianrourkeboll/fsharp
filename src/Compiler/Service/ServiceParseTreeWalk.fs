@@ -458,9 +458,14 @@ module SyntaxTraversal =
                                         None)
                         | _ -> ()
 
-                        for field, _, x in fields do
-                            yield dive () field.Range (fun () -> visitor.VisitRecordField(path, copyOpt |> Option.map fst, Some field))
-                            yield dive x x.Range traverseSynExpr
+                        for fieldOrSpread in fields do
+                            match fieldOrSpread with
+                            | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (field, _, x, _), _) ->
+                                yield dive () field.Range (fun () -> visitor.VisitRecordField(path, copyOpt |> Option.map fst, Some field))
+                                yield dive x x.Range traverseSynExpr
+                            | SynExprAnonRecordFieldOrSpread.Spread _ ->
+                                // TODO.
+                                ()
                     ]
                     |> pick expr
 
@@ -527,8 +532,7 @@ module SyntaxTraversal =
 
                         for fieldOrSpread in fields do
                             match fieldOrSpread with
-                            | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(
-                                fieldName = (field, _); expr = e; blockSeparator = sepOpt)) ->
+                            | SynExprRecordFieldOrSpread.Field(SynExprRecordField(fieldName = (field, _); expr = e; blockSeparator = sepOpt)) ->
                                 yield
                                     dive (path, copyOpt, Some field) field.Range (fun r ->
                                         if rangeContainsPos field.Range pos then
@@ -569,8 +573,8 @@ module SyntaxTraversal =
                                             diveIntoSeparator offsideColumn scPosOpt copyOpt)
                                 | _ -> ()
 
-                            | SynExprRecordFieldOrSpread.SynExprSpread(SynExprSpread(spreadRange = spreadRange; expr = expr; without = _todo),
-                                                                       sepOpt) ->
+                            | SynExprRecordFieldOrSpread.Spread(SynExprSpread(spreadRange = spreadRange; expr = expr; without = _todo),
+                                                                sepOpt) ->
                                 yield dive expr expr.Range traverseSynExpr
 
                                 match sepOpt with

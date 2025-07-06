@@ -822,8 +822,7 @@ module ParsedInput =
                 ifPosInRange r (fun _ ->
                     fields
                     |> List.tryPick (function
-                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(expr = e)) ->
-                            e |> Option.bind (walkExprWithKind parentKind)
+                        | SynExprRecordFieldOrSpread.Field(SynExprRecordField(expr = e)) -> e |> Option.bind (walkExprWithKind parentKind)
                         | _ -> None (* TODO. *) ))
 
             | SynExpr.ObjExpr(objType = ty; bindings = bindings; members = ms; extraImpls = ifaces) ->
@@ -1491,8 +1490,7 @@ module ParsedInput =
                         | SyntaxNode.SynExpr(SynExpr.Record(None, _, fields, _)) :: _ ->
                             let isFirstField =
                                 match field, fields with
-                                | Some contextLid,
-                                  SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = lid, _)) :: _ ->
+                                | Some contextLid, SynExprRecordFieldOrSpread.Field(SynExprRecordField(fieldName = lid, _)) :: _ ->
                                     contextLid.Range = lid.Range
                                 // TODO: spreads.
                                 | _ -> false
@@ -2076,10 +2074,10 @@ module ParsedInput =
             | SynExpr.Record(recordFields = fields) ->
                 fields
                 |> List.iter (function
-                    | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = (ident, _); expr = e)) ->
+                    | SynExprRecordFieldOrSpread.Field(SynExprRecordField(fieldName = (ident, _); expr = e)) ->
                         addLongIdentWithDots ident
                         e |> Option.iter walkExpr
-                    | SynExprRecordFieldOrSpread.SynExprSpread _ ->
+                    | SynExprRecordFieldOrSpread.Spread _ ->
                         // TODO.
                         ())
 

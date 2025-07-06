@@ -597,7 +597,7 @@ type SynExpr =
     | AnonRecd of
         isStruct: bool *
         copyInfo: (SynExpr * BlockSeparator) option *
-        recordFields: (SynLongIdent * range option * SynExpr) list *
+        recordFields: SynExprAnonRecordFieldOrSpread list *
         range: range *
         trivia: SynExprAnonRecdTrivia
 
@@ -1071,13 +1071,26 @@ type SynExprRecordField =
         range: range *
         blockSeparator: BlockSeparator option
 
-/// Represents either a record field declaration or a spread expression.
+/// Represents either a field declaration or a spread expression in a nominal record construction expression.
 ///
 /// let r = { A = 3; ...b; C = true }
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprRecordFieldOrSpread =
-    | SynExprRecordField of field: SynExprRecordField
-    | SynExprSpread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+    | Field of field: SynExprRecordField
+    | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+
+[<NoEquality; NoComparison>]
+type SynExprAnonRecordField =
+    | SynExprAnonRecordField of fieldName: SynLongIdent * equalsRange: range option * expr: SynExpr * range: range
+
+/// Represents either a field declaration or a spread expression in an anonymous record construction expression.
+///
+/// let r = {| A = 3; ...b; C = true |}
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynExprAnonRecordFieldOrSpread =
+    | Field of field: SynExprAnonRecordField * blockSeparator: BlockSeparator option
+    | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+    member Range : range
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =

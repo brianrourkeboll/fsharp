@@ -14,7 +14,7 @@ let ``Record spread compiles`` () =
     type R4 = { ...R2; D : float }
     type R5 = { ...R1; ...R2; E : float }
 
-    let _ : R3 = { A = 3; B = "lol"; C = 3.14  }
+    let _ : R3 = { A = 3; B = "lol"; C = 3.14 }
     let _ : R4 = { X = 3; Y = "lol"; D = 3.14 }
     let _ : R5 = { A = 3; B = "lol"; X = 3; Y = "lol"; E = 3.14 }
     """
@@ -72,6 +72,24 @@ let ``Spreading a record type that also has properties ignores the properties`` 
     type R2 = { ...R1; C : string }
 
     let _ : R2 = { A = 3; B = "3"; C = "asdf" }
+    """
+    |> typecheck
+    |> shouldSucceed
+
+[<Fact>]
+let ``Spreading into an anonymous record works`` () =
+    FSharp """
+    type R1 =
+        { A : int
+          B : string }
+        member _.Lol = 99
+
+    type R2 = { ...R1; C : string }
+
+    let r1 = { A = 3; B = "4" }
+    let r2 = { A = 5; B = "6"; C = "haha" }
+
+    let _ = {| ...r1; ...r2 |}
     """
     |> typecheck
     |> shouldSucceed

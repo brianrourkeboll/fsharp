@@ -849,7 +849,7 @@ module InterfaceStubGenerator =
                 | SynExpr.Record(_inheritOpt, _copyOpt, fields, _range) ->
                     List.tryPick
                         (function
-                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(expr = e)) -> Option.bind walkExpr e
+                        | SynExprRecordFieldOrSpread.Field(SynExprRecordField(expr = e)) -> Option.bind walkExpr e
                         | _ -> None (* TODO. *) )
                         fields
 

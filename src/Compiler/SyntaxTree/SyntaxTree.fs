@@ -539,7 +539,7 @@ type SynExpr =
     | AnonRecd of
         isStruct: bool *
         copyInfo: (SynExpr * BlockSeparator) option *
-        recordFields: (SynLongIdent * range option * SynExpr) list *
+        recordFields: SynExprAnonRecordFieldOrSpread list *
         range: range *
         trivia: SynExprAnonRecdTrivia
 
@@ -933,8 +933,20 @@ type SynExprRecordField =
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynExprRecordFieldOrSpread =
-    | SynExprRecordField of field: SynExprRecordField
-    | SynExprSpread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+    | Field of field: SynExprRecordField
+    | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+
+[<NoEquality; NoComparison>]
+type SynExprAnonRecordField = SynExprAnonRecordField of fieldName: SynLongIdent * equalsRange: range option * expr: SynExpr * range: range
+
+[<NoEquality; NoComparison; RequireQualifiedAccess>]
+type SynExprAnonRecordFieldOrSpread =
+    | Field of field: SynExprAnonRecordField * blockSeparator: BlockSeparator option
+    | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+    member this.Range =
+        match this with
+        | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, _, m), _)
+        | SynExprAnonRecordFieldOrSpread.Spread (SynExprSpread (_, _, _, m), _) -> m
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =

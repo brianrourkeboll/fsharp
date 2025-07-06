@@ -730,20 +730,20 @@ let rebindRanges first fields lastSep =
             match l with
             | [] ->
                 List.rev (
-                    SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(name, mEquals, value, fieldRange, lastSep))
+                    SynExprRecordFieldOrSpread.Field(SynExprRecordField(name, mEquals, value, fieldRange, lastSep))
                     :: acc
                 )
             | (f, m) :: xs ->
                 run
                     f
                     xs
-                    (SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(name, mEquals, value, fieldRange, m))
+                    (SynExprRecordFieldOrSpread.Field(SynExprRecordField(name, mEquals, value, fieldRange, m))
                      :: acc)
 
         | RecordFieldNameOrSpread.Spread spread ->
             match l with
-            | [] -> List.rev (SynExprRecordFieldOrSpread.SynExprSpread(spread, lastSep) :: acc)
-            | (f, _) :: xs -> run f xs (SynExprRecordFieldOrSpread.SynExprSpread(spread, lastSep) :: acc)
+            | [] -> List.rev (SynExprRecordFieldOrSpread.Spread(spread, lastSep) :: acc)
+            | (f, _) :: xs -> run f xs (SynExprRecordFieldOrSpread.Spread(spread, lastSep) :: acc)
 
     run first fields []
 

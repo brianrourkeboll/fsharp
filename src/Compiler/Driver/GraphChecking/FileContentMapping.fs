@@ -380,8 +380,8 @@ let visitSynExpr (e: SynExpr) : FileContentEntry list =
         | SynExpr.AnonRecd(copyInfo = copyInfo; recordFields = recordFields) ->
             let continuations =
                 match copyInfo with
-                | None -> List.map (fun (_, _, e) -> visit e) recordFields
-                | Some(cp, _) -> visit cp :: List.map (fun (_, _, e) -> visit e) recordFields
+                | None -> List.choose (function SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, e, _), _) -> Some (visit e) | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *)) recordFields
+                | Some(cp, _) -> visit cp :: List.choose (function SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, e, _), _) -> Some (visit e) | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *)) recordFields
 
             Continuation.concatenate continuations continuation
         | SynExpr.ArrayOrList(exprs = exprs) ->
@@ -392,10 +392,10 @@ let visitSynExpr (e: SynExpr) : FileContentEntry list =
                 [
                     for fieldOrSpread in recordFields do
                         match fieldOrSpread with
-                        | SynExprRecordFieldOrSpread.SynExprRecordField(SynExprRecordField(fieldName = (si, _); expr = expr)) ->
+                        | SynExprRecordFieldOrSpread.Field(SynExprRecordField(fieldName = (si, _); expr = expr)) ->
                             yield! visitSynLongIdent si
                             yield! collectFromOption visitSynExpr expr
-                        | SynExprRecordFieldOrSpread.SynExprSpread _ ->
+                        | SynExprRecordFieldOrSpread.Spread _ ->
                             // TODO.
                             ()
                 ]
