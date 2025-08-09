@@ -3394,6 +3394,19 @@ module EstablishTypeDefinitionCores =
               
            with RecoverableException exn -> errorRecovery exn m))
 
+    /// A record field ID that is either from
+    /// an explicit field declaration or from a spread type.
+    [<NoEquality; NoComparison>]
+    type private RecordFieldId =
+        /// A record field ID from an explicit field declaration:
+        /// type R = { A : int }
+        | ExplicitField of Ident
+
+        /// A record field ID derived from a spread:
+        /// type R1 = { A : int }
+        /// type R2 = { ...R1 } // R2.A
+        | SpreadField of Ident
+
     /// Establish the fields, dispatch slots and union cases of a type
     let private TcTyconDefnCore_Phase1G_EstablishRepresentation (cenv: cenv) envinner tpenv inSig (MutRecDefnsPhase1DataForTycon(_, synTyconRepr, _, _, _, _)) (tycon: Tycon) (attrs: Attribs) =
         let g = cenv.g
@@ -3601,7 +3614,7 @@ module EstablishTypeDefinitionCores =
 
                             | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
                                 match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
-                                | Some recdField -> tcFieldsAndSpreads (recdField :: fields) (recdField.Id :: ids) tpenv fieldsAndSpreads
+                                | Some recdField -> tcFieldsAndSpreads (recdField :: fields) (ExplicitField recdField.Id :: ids) tpenv fieldsAndSpreads
                                 | None -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
 
                             | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
@@ -3622,12 +3635,11 @@ module EstablishTypeDefinitionCores =
                                                 let freshenedTypar =
                                                     let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
                                                     let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
-                                                    let attrs = [] // TODO: should these be copied?
-                                                    Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.No, attrs, false, false) 
+                                                    Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.No, typar.Attribs, false, false) 
 
                                                 { fieldInfo.RecdField with rfield_type = mkTyparTy freshenedTypar }
 
-                                        tcFieldsOfSpreadTy (recdField :: fields) (syntheticId :: ids) fieldsOfTy
+                                        tcFieldsOfSpreadTy (recdField :: fields) (SpreadField syntheticId :: ids) fieldsOfTy
 
                                     | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields ids fieldsOfTy
 
@@ -3635,7 +3647,38 @@ module EstablishTypeDefinitionCores =
 
                         tcFieldsAndSpreads [] [] tpenv fieldsAndSpreads
 
-                    ids |> CheckDuplicates (fun id -> id) "field" |> ignore
+                    // This inherits its quadratic behavior from CheckDuplicates, which see.
+                    ids |> List.iteri (fun i id1 ->
+                        ids |> List.iteri (fun j id2 ->
+                            if j > i then
+                                match id1, id2 with
+                                // Explicit duplicate fields are not allowed.
+                                // type R = { A : int; A : string }
+                                | ExplicitField id1, ExplicitField id2 ->
+                                    if id1.idText = id2.idText then
+                                        errorR (Duplicate("field", id1.idText, id2.idRange))
+
+                                // We warn on shadowing from spreads.
+                                // type R1 = { A : int }
+                                // type R2 = { A : string; ...R1 }
+                                | ExplicitField id1, SpreadField id2 ->
+                                    if id1.idText = id2.idText then
+                                        // TODO: Dedicated warning?
+                                        // Field 'A: int' from spread type 'R1' shadows the explicitly declared field 'A: string` with the same name.
+                                        warning (Duplicate("field", id1.idText, id2.idRange))
+
+                                // We warn on shadowing from spreads.
+                                // type R1 = { A : int }
+                                // type R2 = { A : string }
+                                // type R3 = { ...R1; ...R2 }
+                                | SpreadField id1, SpreadField id2 ->
+                                    if id1.idText = id2.idText then
+                                        // TODO: Dedicated warning?
+                                        // Field 'A: int' from spread type 'R2' shadows the field 'A: string` from spread type 'R1' with the same name.
+                                        warning (Duplicate("field", id1.idText, id2.idRange))
+
+                                | _ -> ()))
+
                     writeFakeRecordFieldsToSink recdFields
                     CallEnvSink cenv.tcSink (mRepr, envinner.NameEnv, ad)
 
