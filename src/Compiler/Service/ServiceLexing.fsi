@@ -506,6 +506,7 @@ type public FSharpTokenKind =
     | End
     | DotDot
     | DotDotHat
+    | DotDotDot
     | BarBar
     | Upcast
     | Downcast

@@ -3587,36 +3587,55 @@ module EstablishTypeDefinitionCores =
                     let repr = Construct.MakeUnionRepr unionCases
                     repr, None, NoSafeInitInfo
 
-                | SynTypeDefnSimpleRepr.Record (_, fieldsAndSpreads, mRepr) -> 
+                | SynTypeDefnSimpleRepr.Record (_accessibility, fieldsAndSpreads, mRepr) -> 
                     noMeasureAttributeCheck()
                     noSealedAttributeCheck FSComp.SR.tcTypesAreAlwaysSealedRecord
                     noAbstractClassAttributeCheck()
                     noAllowNullLiteralAttributeCheck()
                     structLayoutAttributeCheck true  // these are allowed for records
 
-                    let idRanges = Dictionary ()
-                    let recdFields =
-                        fieldsAndSpreads
-                        |> List.collect (function
-                            | SynFieldOrSpread.SynSpread (SynTypeSpread (ty=ty; range=spreadRange)) ->
-                                let ty, _ = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
-                                ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false
-                                |> List.choose (function
-                                    | Item.RecdField fieldInfo ->
-                                        let key = struct (fieldInfo.RecdField.Id.idText, fieldInfo.RecdField.Id.idRange)
-                                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, spreadRange)
-                                        idRanges.Add (key, syntheticId)
-                                        Some fieldInfo.RecdField
-                                    | _ -> None)
+                    let recdFields, ids, _tpenv =
+                        let rec tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads =
+                            match fieldsAndSpreads with
+                            | [] -> List.rev fields, List.rev ids, tpenv
 
-                            | SynFieldOrSpread.SynField synField ->
+                            | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
                                 match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
-                                | Some recdField ->
-                                    idRanges.Add (struct (recdField.Id.idText, recdField.Id.idRange), recdField.Id)
-                                    [recdField]
-                                | None -> [])
+                                | Some recdField -> tcFieldsAndSpreads (recdField :: fields) (recdField.Id :: ids) tpenv fieldsAndSpreads
+                                | None -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
 
-                    idRanges.Values |> List.ofSeq |> CheckDuplicates (fun id -> id) "field" |> ignore
+                            | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
+                                let ty, tpenv = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.Use WarnOnIWSAM.Yes envinner tpenv ty
+
+                                let rec tcFieldsOfSpreadTy fields ids fieldsOfTy =
+                                    match fieldsOfTy with
+                                    | [] -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
+                                    | Item.RecdField fieldInfo :: fieldsOfTy ->
+                                        // If this field is a duplicate, report the error using the range of the spread,
+                                        // not the range of its declaration site (which may not even be in the same assembly, etc.).
+                                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)
+
+                                        let recdField =
+                                            match tryDestTyparTy g fieldInfo.RecdField.FormalType with
+                                            | ValueNone -> fieldInfo.RecdField
+                                            | ValueSome typar ->
+                                                let freshenedTypar =
+                                                    let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
+                                                    let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
+                                                    let attrs = [] // TODO: should these be copied?
+                                                    Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.No, attrs, false, false) 
+
+                                                { fieldInfo.RecdField with rfield_type = mkTyparTy freshenedTypar }
+
+                                        tcFieldsOfSpreadTy (recdField :: fields) (syntheticId :: ids) fieldsOfTy
+
+                                    | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields ids fieldsOfTy
+
+                                tcFieldsOfSpreadTy fields ids (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false)
+
+                        tcFieldsAndSpreads [] [] tpenv fieldsAndSpreads
+
+                    ids |> CheckDuplicates (fun id -> id) "field" |> ignore
                     writeFakeRecordFieldsToSink recdFields
                     CallEnvSink cenv.tcSink (mRepr, envinner.NameEnv, ad)
 
