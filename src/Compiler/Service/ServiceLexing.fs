@@ -1437,6 +1437,7 @@ type FSharpTokenKind =
     | End
     | DotDot
     | DotDotHat
+    | DotDotDot
     | BarBar
     | Upcast
     | Downcast
@@ -1650,6 +1651,7 @@ type FSharpToken =
         | END -> FSharpTokenKind.End
         | DOT_DOT -> FSharpTokenKind.DotDot
         | DOT_DOT_HAT -> FSharpTokenKind.DotDotHat
+        | DOT_DOT_DOT -> FSharpTokenKind.DotDotDot
         | BAR_BAR -> FSharpTokenKind.BarBar
         | UPCAST -> FSharpTokenKind.Upcast
         | DOWNCAST -> FSharpTokenKind.Downcast
