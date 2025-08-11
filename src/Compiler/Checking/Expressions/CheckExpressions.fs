@@ -8159,8 +8159,9 @@ and TcCopyAndUpdateAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, (or
         (tpenv, List.zip unsortedFieldSynExprsGiven unsortedFieldTysGiven) ||> List.mapFold (fun tpenv (synExprOrSpreadValue, fieldTy) ->
             match synExprOrSpreadValue with
             | SynExprOrSpreadValue.SynExpr synExpr -> TcExprFlex cenv true false fieldTy env tpenv synExpr
-            | SynExprOrSpreadValue.SpreadValue (_ty, _expr) ->
-                failwith "TODO")
+            | SynExprOrSpreadValue.SpreadValue (ty, expr) ->
+                AddCxTypeMustSubsumeType env.eContextInfo env.DisplayEnv cenv.css expr.Range NoTrace fieldTy ty
+                expr, tpenv)
 
     let unsortedFieldExprsGiven = unsortedFieldExprsGiven |> List.toArray
 
