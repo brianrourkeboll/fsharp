@@ -460,7 +460,7 @@ module SyntaxTraversal =
 
                         for fieldOrSpread in fields do
                             match fieldOrSpread with
-                            | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (field, _, x, _), _) ->
+                            | SynExprAnonRecordFieldOrSpread.Field(SynExprAnonRecordField(field, _, x, _), _) ->
                                 yield dive () field.Range (fun () -> visitor.VisitRecordField(path, copyOpt |> Option.map fst, Some field))
                                 yield dive x x.Range traverseSynExpr
                             | SynExprAnonRecordFieldOrSpread.Spread _ ->

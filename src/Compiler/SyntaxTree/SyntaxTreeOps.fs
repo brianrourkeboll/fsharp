@@ -920,9 +920,13 @@ let rec synExprContainsError inpExpr =
             (match origExpr with
              | Some(e, _) -> walkExpr e
              | None -> false)
-            || walkExprs (List.choose (function
-                | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, e, _), _) -> Some e
-                | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *)) flds)
+            || walkExprs (
+                List.choose
+                    (function
+                    | SynExprAnonRecordFieldOrSpread.Field(SynExprAnonRecordField(_, _, e, _), _) -> Some e
+                    | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *) )
+                    flds
+            )
 
         | SynExpr.Record(_, origExpr, fs, _) ->
             (match origExpr with

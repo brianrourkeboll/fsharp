@@ -40,12 +40,14 @@ let GroupUpdatesToNestedFields (fields: ((Ident list * Ident) * SynExprOrSpreadV
         | [ x ] -> x :: res
         | x :: y :: ys ->
             match x, y with
-            | (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.Record(baseInfo, copyInfo, fields1, m)))), (_, Some(SynExprOrSpreadValue.SynExpr(SynExpr.Record(recordFields = fields2)))) ->
+            | (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.Record(baseInfo, copyInfo, fields1, m)))),
+              (_, Some(SynExprOrSpreadValue.SynExpr(SynExpr.Record(recordFields = fields2)))) ->
                 let reducedRecd =
                     (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.Record(baseInfo, copyInfo, fields1 @ fields2, m))))
 
                 groupIfNested res (reducedRecd :: ys)
-            | (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.AnonRecd(isStruct, copyInfo, fields1, m, trivia)))), (_, Some(SynExprOrSpreadValue.SynExpr(SynExpr.AnonRecd(recordFields = fields2)))) ->
+            | (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.AnonRecd(isStruct, copyInfo, fields1, m, trivia)))),
+              (_, Some(SynExprOrSpreadValue.SynExpr(SynExpr.AnonRecd(recordFields = fields2)))) ->
                 let reducedRecd =
                     (lidwid, Some(SynExprOrSpreadValue.SynExpr(SynExpr.AnonRecd(isStruct, copyInfo, fields1 @ fields2, m, trivia))))
 
@@ -169,11 +171,13 @@ let TransformAstForNestedUpdates (cenv: TcFileState) (env: TcEnv) overallTy (lid
 
         let recdExpr =
             match exprBeingAssigned with
-            | SynExprOrSpreadValue.SynExpr synExpr -> Some(SynExprOrSpreadValue.SynExpr(synExprRecd (recdExprCopyInfo (fields |> List.map fst) withExpr) outerFieldId rest synExpr))
+            | SynExprOrSpreadValue.SynExpr synExpr ->
+                Some(
+                    SynExprOrSpreadValue.SynExpr(synExprRecd (recdExprCopyInfo (fields |> List.map fst) withExpr) outerFieldId rest synExpr)
+                )
             | SynExprOrSpreadValue.SpreadValue _ -> Some exprBeingAssigned
 
-        (accessIds, outerFieldId),
-        recdExpr
+        (accessIds, outerFieldId), recdExpr
 
 /// When the original expression in copy-and-update is more complex than `{ x with ... }`, like `{ f () with ... }`,
 /// we bind it first, so that it's not evaluated multiple times during a nested update

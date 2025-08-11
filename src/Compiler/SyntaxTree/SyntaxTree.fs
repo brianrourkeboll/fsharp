@@ -943,10 +943,11 @@ type SynExprAnonRecordField = SynExprAnonRecordField of fieldName: SynLongIdent 
 type SynExprAnonRecordFieldOrSpread =
     | Field of field: SynExprAnonRecordField * blockSeparator: BlockSeparator option
     | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
+
     member this.Range =
         match this with
-        | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, _, m), _)
-        | SynExprAnonRecordFieldOrSpread.Spread (SynExprSpread (_, _, _, m), _) -> m
+        | SynExprAnonRecordFieldOrSpread.Field(SynExprAnonRecordField(_, _, _, m), _)
+        | SynExprAnonRecordFieldOrSpread.Spread(SynExprSpread(_, _, _, m), _) -> m
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =
