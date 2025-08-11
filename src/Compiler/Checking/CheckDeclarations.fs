@@ -3623,7 +3623,7 @@ module EstablishTypeDefinitionCores =
                                 let rec tcFieldsOfSpreadTy fields ids fieldsOfTy =
                                     match fieldsOfTy with
                                     | [] -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
-                                    | Item.RecdField fieldInfo :: fieldsOfTy ->
+                                    | Item.RecdField fieldInfo :: fieldsOfTy when IsRecdFieldAccessible cenv.amap m ad fieldInfo.RecdFieldRef ->
                                         // If this field is a duplicate, report the error using the range of the spread,
                                         // not the range of its declaration site (which may not even be in the same assembly, etc.).
                                         let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)

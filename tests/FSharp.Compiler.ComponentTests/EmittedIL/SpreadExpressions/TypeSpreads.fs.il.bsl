@@ -3367,6 +3367,56 @@
     } 
   } 
 
+  .field static assembly class assembly/R1 r1@7
+  .custom instance void [runtime]System.Diagnostics.DebuggerBrowsableAttribute::.ctor(valuetype [runtime]System.Diagnostics.DebuggerBrowsableState) = ( 01 00 00 00 00 00 00 00 ) 
+  .field static assembly class assembly/R2 r2@8
+  .custom instance void [runtime]System.Diagnostics.DebuggerBrowsableAttribute::.ctor(valuetype [runtime]System.Diagnostics.DebuggerBrowsableState) = ( 01 00 00 00 00 00 00 00 ) 
+  .field static assembly class assembly/R3 r3@9
+  .custom instance void [runtime]System.Diagnostics.DebuggerBrowsableAttribute::.ctor(valuetype [runtime]System.Diagnostics.DebuggerBrowsableState) = ( 01 00 00 00 00 00 00 00 ) 
+  .field static assembly class assembly/R4 r4@10
+  .custom instance void [runtime]System.Diagnostics.DebuggerBrowsableAttribute::.ctor(valuetype [runtime]System.Diagnostics.DebuggerBrowsableState) = ( 01 00 00 00 00 00 00 00 ) 
+  .field static assembly class assembly/R5 r5@11
+  .custom instance void [runtime]System.Diagnostics.DebuggerBrowsableAttribute::.ctor(valuetype [runtime]System.Diagnostics.DebuggerBrowsableState) = ( 01 00 00 00 00 00 00 00 ) 
+  .method public specialname static class assembly/R1 get_r1() cil managed
+  {
+    
+    .maxstack  8
+    IL_0000:  ldsfld     class assembly/R1 assembly::r1@7
+    IL_0005:  ret
+  } 
+
+  .method public specialname static class assembly/R2 get_r2() cil managed
+  {
+    
+    .maxstack  8
+    IL_0000:  ldsfld     class assembly/R2 assembly::r2@8
+    IL_0005:  ret
+  } 
+
+  .method public specialname static class assembly/R3 get_r3() cil managed
+  {
+    
+    .maxstack  8
+    IL_0000:  ldsfld     class assembly/R3 assembly::r3@9
+    IL_0005:  ret
+  } 
+
+  .method public specialname static class assembly/R4 get_r4() cil managed
+  {
+    
+    .maxstack  8
+    IL_0000:  ldsfld     class assembly/R4 assembly::r4@10
+    IL_0005:  ret
+  } 
+
+  .method public specialname static class assembly/R5 get_r5() cil managed
+  {
+    
+    .maxstack  8
+    IL_0000:  ldsfld     class assembly/R5 assembly::r5@11
+    IL_0005:  ret
+  } 
+
   .method private specialname rtspecialname static void  .cctor() cil managed
   {
     
@@ -3384,32 +3434,75 @@
     .maxstack  7
     IL_0000:  ldc.i4.3
     IL_0001:  ldstr      "lol"
-    IL_0006:  ldc.r8     3.1400000000000001
-    IL_000f:  newobj     instance void assembly/R3::.ctor(int32,
+    IL_0006:  newobj     instance void assembly/R1::.ctor(int32,
+                                                             string)
+    IL_000b:  stsfld     class assembly/R1 assembly::r1@7
+    IL_0010:  ldc.i4.4
+    IL_0011:  ldstr      "ha"
+    IL_0016:  newobj     instance void assembly/R2::.ctor(int32,
+                                                             string)
+    IL_001b:  stsfld     class assembly/R2 assembly::r2@8
+    IL_0020:  call       class assembly/R1 assembly::get_r1()
+    IL_0025:  ldfld      int32 assembly/R1::A@
+    IL_002a:  call       class assembly/R1 assembly::get_r1()
+    IL_002f:  ldfld      string assembly/R1::B@
+    IL_0034:  ldc.r8     3.1400000000000001
+    IL_003d:  newobj     instance void assembly/R3::.ctor(int32,
                                                              string,
                                                              float64)
-    IL_0014:  pop
-    IL_0015:  ldc.i4.3
-    IL_0016:  ldstr      "lol"
-    IL_001b:  ldc.r8     3.1400000000000001
-    IL_0024:  newobj     instance void assembly/R4::.ctor(int32,
+    IL_0042:  stsfld     class assembly/R3 assembly::r3@9
+    IL_0047:  call       class assembly/R2 assembly::get_r2()
+    IL_004c:  ldfld      int32 assembly/R2::X@
+    IL_0051:  call       class assembly/R2 assembly::get_r2()
+    IL_0056:  ldfld      string assembly/R2::Y@
+    IL_005b:  ldc.r8     3.1400000000000001
+    IL_0064:  newobj     instance void assembly/R4::.ctor(int32,
                                                              string,
                                                              float64)
-    IL_0029:  pop
-    IL_002a:  ldc.i4.3
-    IL_002b:  ldstr      "lol"
-    IL_0030:  ldc.i4.3
-    IL_0031:  ldstr      "lol"
-    IL_0036:  ldc.r8     3.1400000000000001
-    IL_003f:  newobj     instance void assembly/R5::.ctor(int32,
+    IL_0069:  stsfld     class assembly/R4 assembly::r4@10
+    IL_006e:  call       class assembly/R1 assembly::get_r1()
+    IL_0073:  ldfld      int32 assembly/R1::A@
+    IL_0078:  call       class assembly/R1 assembly::get_r1()
+    IL_007d:  ldfld      string assembly/R1::B@
+    IL_0082:  call       class assembly/R2 assembly::get_r2()
+    IL_0087:  ldfld      int32 assembly/R2::X@
+    IL_008c:  call       class assembly/R2 assembly::get_r2()
+    IL_0091:  ldfld      string assembly/R2::Y@
+    IL_0096:  ldc.r8     3.1400000000000001
+    IL_009f:  newobj     instance void assembly/R5::.ctor(int32,
                                                              string,
                                                              int32,
                                                              string,
                                                              float64)
-    IL_0044:  pop
-    IL_0045:  ret
+    IL_00a4:  stsfld     class assembly/R5 assembly::r5@11
+    IL_00a9:  ret
   } 
 
+  .property class assembly/R1 r1()
+  {
+    .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 09 00 00 00 00 00 ) 
+    .get class assembly/R1 assembly::get_r1()
+  } 
+  .property class assembly/R2 r2()
+  {
+    .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 09 00 00 00 00 00 ) 
+    .get class assembly/R2 assembly::get_r2()
+  } 
+  .property class assembly/R3 r3()
+  {
+    .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 09 00 00 00 00 00 ) 
+    .get class assembly/R3 assembly::get_r3()
+  } 
+  .property class assembly/R4 r4()
+  {
+    .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 09 00 00 00 00 00 ) 
+    .get class assembly/R4 assembly::get_r4()
+  } 
+  .property class assembly/R5 r5()
+  {
+    .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 09 00 00 00 00 00 ) 
+    .get class assembly/R5 assembly::get_r5()
+  } 
 } 
 
 .class private abstract auto ansi sealed '<StartupCode$assembly>'.$assembly

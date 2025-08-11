@@ -7,6 +7,25 @@ open Xunit
 
 module TypeSpreads =
     module Records =
+        module RightmostWins = ()
+        module DuplicateFieldHandling = ()
+        module GenericTypeParameters = ()
+
+        module Accessibility =
+            [<Fact>]
+            let ``Private into public compiles`` () =
+                FSharp
+                    """
+                    type private R1 = { A : int; B : string }
+                    type R2 = { ...R1 }
+                    """
+                |> typecheck
+                |> shouldSucceed
+
+        module Mutability = ()
+        module StaticFields = ()
+        module NonRecordSource = ()
+
         [<Fact>]
         let ``Record spread compiles`` () =
             FSharp """
@@ -24,7 +43,7 @@ module TypeSpreads =
             |> shouldSucceed
 
         [<Fact>]
-        let ``Order doesn't matter`` () =
+        let ``Record spread compiles, different order`` () =
             FSharp """
             type R1 = { A : int; B : string }
             type R2 = { X : int; Y : string }
@@ -40,24 +59,32 @@ module TypeSpreads =
             |> shouldSucceed
 
         [<Fact>]
-        let ``No dupes allowed`` () =
+        let ``No explicit duplicate fields allowed`` () =
             FSharp """
-            type R1 = { A : int; B : string }
+            type R = { A : int; A : string }
+            """
+            |> typecheck
+            |> shouldFail
+            |> withSingleDiagnostic (Error 37, Line 2, Col 33, Line 2, Col 34, "Duplicate definition of field 'A'")
+
+        [<Fact>]
+        let ``No warning for explicit field shadowing spread field`` () =
+            FSharp """
+            type R1 = { A : int }
+            type R2 = { ...R1; A : string }
+            """
+            |> typecheck
+            |> shouldSucceed
+
+        [<Fact>]
+        let ``Warning for spread field shadowing explicit field`` () =
+            FSharp """
+            type R1 = { A : int }
             type R2 = { A : int; ...R1 }
             """
             |> typecheck
             |> shouldFail
-            |> withSingleDiagnostic (Error 37, Line 3, Col 34, Line 3, Col 39, "Duplicate definition of field 'A'")
-
-        [<Fact>]
-        let ``No dupes allowed, any order`` () =
-            FSharp """
-            type R1 = { A : int; B : string }
-            type R2 = { ...R1; A : int }
-            """
-            |> typecheck
-            |> shouldFail
-            |> withSingleDiagnostic (Error 37, Line 3, Col 32, Line 3, Col 33, "Duplicate definition of field 'A'")
+            |> withSingleDiagnostic (Warning 37, Line 3, Col 34, Line 3, Col 39, "Duplicate definition of field 'A'")
 
         [<Fact>]
         let ``No dupes allowed, multiple`` () =
@@ -68,10 +95,9 @@ module TypeSpreads =
             |> typecheck
             |> shouldFail
             |> withDiagnostics [
-                Error 37, Line 3, Col 32, Line 3, Col 33, "Duplicate definition of field 'A'"
-                Error 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'A'"
+                Warning 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'A'"
+                Warning 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'B'"
                 Error 37, Line 3, Col 48, Line 3, Col 49, "Duplicate definition of field 'A'"
-                Error 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'B'"
             ]
 
         [<Fact>]
@@ -155,6 +181,50 @@ module TypeSpreads =
                 Error 39, Line 5, Col 42, Line 5, Col 44, "The type parameter 'b is not defined."
             ]
 
+        // Just like
+        // type R1<[<Measure>] 'a> = { A : int<'a> }
+        // type R2<'a> = { X : R1<'a> }
+        [<Fact>]
+        let ``Generic record spread, measure attribute on source, required on spread destination`` () =
+            FSharp """
+            type R1<[<Measure>] 'a> = { A : int<'a> }
+            type R2<'a> = { ...R1<'a> }
+            """
+            |> typecheck
+            |> shouldFail
+            |> withSingleDiagnostic (Error 702, Line 3, Col 35, Line 3, Col 37, "Expected unit-of-measure parameter, not type parameter. Explicit unit-of-measure parameters must be marked with the [<Measure>] attribute.")
+
+        [<Fact>]
+        let ``Generic record spread, measure attribute on source, measure on spread destination, OK`` () =
+            FSharp """
+            type R1<[<Measure>] 'a> = { A : int<'a> }
+            type R2<[<Measure>] 'a> = { ...R1<'a> }
+            """
+            |> typecheck
+            |> shouldSucceed
+
+        // Just like
+        // type R1<'a when 'a : comparison> = { A : 'a }
+        // type R2<'a> = { X : R1<'a> }
+        [<Fact>]
+        let ``Generic record spread, constraint on source, required on spread destination`` () =
+            FSharp """
+            type R1<'a when 'a : comparison> = { A : 'a }
+            type R2<'a> = { ...R1<'a> }
+            """
+            |> typecheck
+            |> shouldFail
+            |> withSingleDiagnostic (Error 1, Line 3, Col 32, Line 3, Col 38, "A type parameter is missing a constraint 'when 'a: comparison'")
+
+        [<Fact>]
+        let ``Generic record spread, constraint on source, constraint on spread destination, OK`` () =
+            FSharp """
+            type R1<'a when 'a : comparison> = { A : 'a }
+            type R2<'a when 'a : comparison> = { ...R1<'a> }
+            """
+            |> typecheck
+            |> shouldSucceed
+
 module ExpressionSpreads =
     module AnonymousRecords =
         [<Fact>]
@@ -193,3 +263,27 @@ module ExpressionSpreads =
             """
             |> typecheck
             |> shouldSucceed
+
+    module Records =
+        module RecordToRecord =
+            [<Fact>]
+            let ``Can spread a record into a record`` () =
+                FSharp
+                    """
+                    type R1 = { A : int; B : string }
+                    type R2 = { X : int; Y : string }
+                    type R3 = { ...R1; C : float }
+                    type R4 = { ...R2; D : float }
+                    type R5 = { ...R1; ...R2; E : float }
+
+                    let r1 : R1 = { A = 3; B = "lol" }
+                    let r2 : R2 = { X = 4; Y = "ha" }
+                    let r3 : R3 = { ...r1; C = 3.14 }
+                    let r4 : R4 = { ...r2; D = 3.14 }
+                    let r5 : R5 = { ...r1; ...r2; E = 3.14 }
+                    """
+                |> typecheck
+                |> shouldSucceed
+
+        module AnonymousRecordToRecord = ()
+        module ObjToRecord = ()
