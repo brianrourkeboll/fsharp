@@ -1125,8 +1125,8 @@ module SynExpr =
                 let rec loop recordFields =
                     match recordFields with
                     | [] -> false
-                    | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, Some _equalsRange, SynExpr.Paren(expr = Is inner), _), _) :: next :: _ ->
-                        problematic inner.Range next.Range
+                    | SynExprAnonRecordFieldOrSpread.Field(SynExprAnonRecordField(_, Some _equalsRange, SynExpr.Paren(expr = Is inner), _),
+                                                           _) :: next :: _ -> problematic inner.Range next.Range
                     | _ :: recordFields -> loop recordFields
 
                 loop recordFields

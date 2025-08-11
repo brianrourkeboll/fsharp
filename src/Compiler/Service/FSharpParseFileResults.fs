@@ -647,9 +647,13 @@ type FSharpParseFileResults(diagnostics: FSharpDiagnostic[], input: ParsedInput,
                             | Some(e, _) -> yield! walkExpr true e
                             | None -> ()
 
-                            yield! walkExprs (fs |> List.choose (function
-                                | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (_, _, e, _), _) -> Some e
-                                | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *)))
+                            yield!
+                                walkExprs (
+                                    fs
+                                    |> List.choose (function
+                                        | SynExprAnonRecordFieldOrSpread.Field(SynExprAnonRecordField(_, _, e, _), _) -> Some e
+                                        | SynExprAnonRecordFieldOrSpread.Spread _ -> None (* TODO. *) )
+                                )
 
                         | SynExpr.ObjExpr(argOptions = args; bindings = bs; members = ms; extraImpls = is) ->
                             let bs = unionBindingAndMembers bs ms

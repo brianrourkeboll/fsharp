@@ -16,7 +16,8 @@ type SynExprOrSpreadValue =
     | SpreadValue of TType * Expr
 
 val GroupUpdatesToNestedFields:
-    fields: ((Ident list * Ident) * SynExprOrSpreadValue option) list -> ((Ident list * Ident) * SynExprOrSpreadValue option) list
+    fields: ((Ident list * Ident) * SynExprOrSpreadValue option) list ->
+        ((Ident list * Ident) * SynExprOrSpreadValue option) list
 
 val TransformAstForNestedUpdates<'a> :
     cenv: TcFileState ->

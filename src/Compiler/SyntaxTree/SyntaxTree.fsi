@@ -1090,7 +1090,8 @@ type SynExprAnonRecordField =
 type SynExprAnonRecordFieldOrSpread =
     | Field of field: SynExprAnonRecordField * blockSeparator: BlockSeparator option
     | Spread of spread: SynExprSpread * blockSeparator: BlockSeparator option
-    member Range : range
+
+    member Range: range
 
 [<NoEquality; NoComparison; RequireQualifiedAccess>]
 type SynInterpolatedStringPart =
