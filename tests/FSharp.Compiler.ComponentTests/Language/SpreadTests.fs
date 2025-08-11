@@ -22,7 +22,19 @@ module TypeSpreads =
                 |> typecheck
                 |> shouldSucceed
 
-        module Mutability = ()
+        module Mutability =
+            [<Fact>]
+            let ``Mutability is brought over`` () =
+                FSharp
+                    """
+                    type private R1 = { A : int; mutable B : string }
+                    type R2 = { ...R1 }
+                    let r2 : R2 = { A = 1; B = "3" }
+                    r2.B <- "99"
+                    """
+                |> typecheck
+                |> shouldSucceed
+
         module StaticFields = ()
         module NonRecordSource = ()
 
@@ -264,6 +276,22 @@ module ExpressionSpreads =
             |> typecheck
             |> shouldSucceed
 
+        [<Fact>]
+        let ``With`` () =
+            FSharp
+                """
+                type R1 = { A : int; B : string }
+                type R2 = { X : int; Y : string }
+                type R3 = { ...R1; ...R2; E : float }
+
+                let r1 : R1 = { A = 3; B = "lol" }
+                let r2 : R2 = { X = 4; Y = "ha" }
+                let r3 : R3 = { ...r1; ...r2; E = 3.14 }
+                let r3' = {| r3 with E = 5.0; ...r1 |}
+                """
+            |> typecheck
+            |> shouldSucceed
+
     module Records =
         module RecordToRecord =
             [<Fact>]
@@ -281,6 +309,22 @@ module ExpressionSpreads =
                     let r3 : R3 = { ...r1; C = 3.14 }
                     let r4 : R4 = { ...r2; D = 3.14 }
                     let r5 : R5 = { ...r1; ...r2; E = 3.14 }
+                    """
+                |> typecheck
+                |> shouldSucceed
+
+            [<Fact>]
+            let ``With`` () =
+                FSharp
+                    """
+                    type R1 = { A : int; B : string }
+                    type R2 = { X : int; Y : string }
+                    type R3 = { ...R1; ...R2; E : float }
+
+                    let r1 : R1 = { A = 3; B = "lol" }
+                    let r2 : R2 = { X = 4; Y = "ha" }
+                    let r3 : R3 = { ...r1; ...r2; E = 3.14 }
+                    let r3' : R3 = { r3 with E = 5.0; ...r1 }
                     """
                 |> typecheck
                 |> shouldSucceed
