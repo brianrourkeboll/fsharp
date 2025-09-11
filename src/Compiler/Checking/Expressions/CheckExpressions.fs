@@ -7777,7 +7777,6 @@ and TcRecdExpr cenv overallTy env tpenv (inherits, withExprOpt, synRecdFields, m
                     let spreadSrcExpr, tpenv = TcExprFlex cenv flex false (NewInferenceType g) env tpenv expr
                     let tyOfSpreadSrcExpr = tyOfExpr g spreadSrcExpr
 
-                    // TODO: Allow other spreads from obj tys, other kinds of properties, etc.?
                     if isRecdTy g tyOfSpreadSrcExpr || isAnonRecdTy g tyOfSpreadSrcExpr then
                         let rec loopFieldsFromSpread flds fieldsFromSpread =
                             match fieldsFromSpread with
@@ -7797,9 +7796,12 @@ and TcRecdExpr cenv overallTy env tpenv (inherits, withExprOpt, synRecdFields, m
 
                             | _ :: fieldsFromSpread -> loopFieldsFromSpread flds fieldsFromSpread
 
-                        loopFieldsFromSpread flds (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false)
+                        let recordFieldsFromSpread = ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false
+                        loopFieldsFromSpread flds recordFieldsFromSpread
                     else
-                        loopFieldsAndSpreads flds tpenv fieldsAndSpreads (* TODO. *)
+                        // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                        // TODO: Until then, warn that only records are supported?
+                        loopFieldsAndSpreads flds tpenv fieldsAndSpreads
 
             loopFieldsAndSpreads [] tpenv synRecdFields
 
@@ -7918,10 +7920,10 @@ and TcNewAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, unsortedField
     let ad = env.eAccessRights
 
     let unsortedCheckedFields, sortedCheckedFields, tpenv =
-        let rec checkFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads =
+        let rec tcFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads =
             match fieldsAndSpreads with
             | [] ->
-                // When must emit let-bindings for the source expressions in their original order.
+                // We must emit let-bindings for the source expressions in their original order.
                 // TODO: We technically have enough information in the `checkedFields` map to avoid the re-sorting
                 // that happens here and in `mkAnonRecd`.
                 let checkedFieldsInOriginalOrder =
@@ -7949,7 +7951,7 @@ and TcNewAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, unsortedField
                             errorR (Error (FSComp.SR.tcAnonRecdDuplicateFieldId fieldId.idText, fieldId.idRange))
                             dupe)
 
-                checkFieldsAndSpreads checkedFields (i + 1) tpenv fieldsAndSpreads
+                tcFieldsAndSpreads checkedFields (i + 1) tpenv fieldsAndSpreads
 
             // Field shadowing from spreads is allowed:
             //     let a = {| A = 3 |}
@@ -7959,34 +7961,36 @@ and TcNewAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, unsortedField
                 let flex = false
                 let spreadSrcExpr, tpenv = TcExprFlex cenv flex false (NewInferenceType g) env tpenv expr
                 let tyOfSpreadSrcExpr = tyOfExpr g spreadSrcExpr
-                // TODO: Allow other spreads from obj tys, other kinds of properties, etc.?
+
                 if isRecdTy g tyOfSpreadSrcExpr || isAnonRecdTy g tyOfSpreadSrcExpr then
-                    let rec checkFieldsFromSpread checkedFields i fieldsFromSpread =
+                    let rec tcFieldsFromSpread checkedFields i fieldsFromSpread =
                         match fieldsFromSpread with
-                        | [] -> checkFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads
+                        | [] -> tcFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads
 
                         | Item.RecdField fieldInfo :: fieldsFromSpread ->
                             let fieldExpr = mkRecdFieldGetViaExprAddr (spreadSrcExpr, fieldInfo.RecdFieldRef, fieldInfo.TypeInst, m)
                             let fieldId = fieldInfo.RecdFieldRef.RecdField.Id
                             let ty = fieldInfo.FieldType
                             let checkedFields = checkedFields |> Map.add fieldId.idText (i, fieldId, ty, fieldExpr)
-                            checkFieldsFromSpread checkedFields (i + 1) fieldsFromSpread
+                            tcFieldsFromSpread checkedFields (i + 1) fieldsFromSpread
 
                         | Item.AnonRecdField (anonInfo, tys, fieldIndex, _) :: fieldsFromSpread ->
                             let fieldExpr = mkAnonRecdFieldGet g (anonInfo, spreadSrcExpr, tys, i, m)
                             let fieldId = anonInfo.SortedIds[fieldIndex]
                             let ty = tys[fieldIndex]
                             let checkedFields = checkedFields |> Map.add fieldId.idText (i, fieldId, ty, fieldExpr)
-                            checkFieldsFromSpread checkedFields (i + 1) fieldsFromSpread
+                            tcFieldsFromSpread checkedFields (i + 1) fieldsFromSpread
 
-                        | _ :: fields -> checkFieldsFromSpread checkedFields i fields
+                        | _ :: fields -> tcFieldsFromSpread checkedFields i fields
 
-                    checkFieldsFromSpread checkedFields i (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false)
+                    tcFieldsFromSpread checkedFields i (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false)
                 else
+                    // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                    // TODO: Until then, warn that only records are supported?
                     errorR (Error ((4000, "TODO: The source of a spread in an anonymous record expression must have a record or anonymous record type."), expr.Range))
-                    checkFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads
+                    tcFieldsAndSpreads checkedFields i tpenv fieldsAndSpreads
 
-        checkFieldsAndSpreads Map.empty 0 tpenv unsortedFieldIdsAndSynExprsGiven
+        tcFieldsAndSpreads Map.empty 0 tpenv unsortedFieldIdsAndSynExprsGiven
 
     let sortedNames = [| for KeyValue (_, (_, fieldName, _, _)) in sortedCheckedFields -> fieldName |]
 
@@ -8045,11 +8049,13 @@ and TcCopyAndUpdateAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, (or
     if not (isAppTy g origExprTy || isAnonRecdTy g origExprTy) then
         error (Error (FSComp.SR.tcCopyAndUpdateNeedsRecordType(), mOrigExpr))
 
-    // Expand expressions with respect to potential nesting
     let unsortedFieldIdsAndSynExprsGiven, tpenv =
-        let rec loopFieldsAndSpreads flds tpenv fieldsAndSpreads =
+        // Collect explicitly-defined fields and fields from spreads
+        // and expand expressions with respect to potential nesting.
+        let rec collectFields flds tpenv fieldsAndSpreads =
             match fieldsAndSpreads with
-            | [] -> GroupUpdatesToNestedFields (List.rev flds), tpenv
+            | [] -> List.rev flds, tpenv
+
             | SynExprAnonRecordFieldOrSpread.Field (SynExprAnonRecordField (fieldName = synLongIdent; expr = exprBeingAssigned), _) :: fieldsAndSpreads ->
                 let field =
                     match synLongIdent.LongIdent with
@@ -8057,38 +8063,41 @@ and TcCopyAndUpdateAnonRecdExpr cenv (overallTy: TType) env tpenv (isStruct, (or
                     | [ id ] -> ([], id), Some (SynExprOrSpreadValue.SynExpr exprBeingAssigned)
                     | lid -> TransformAstForNestedUpdates cenv env origExprTy lid (SynExprOrSpreadValue.SynExpr exprBeingAssigned) (origExpr, blockSeparator)
 
-                loopFieldsAndSpreads (field :: flds) tpenv fieldsAndSpreads
+                collectFields (field :: flds) tpenv fieldsAndSpreads
 
             | SynExprAnonRecordFieldOrSpread.Spread (SynExprSpread (expr = expr; without = _without; range = m), _) :: fieldsAndSpreads ->
                 let flex = false
                 let spreadSrcExpr, tpenv = TcExprFlex cenv flex false (NewInferenceType g) env tpenv expr
                 let tyOfSpreadSrcExpr = tyOfExpr g spreadSrcExpr
 
-                // TODO: Allow other spreads from obj tys, other kinds of properties, etc.?
                 if isRecdTy g tyOfSpreadSrcExpr || isAnonRecdTy g tyOfSpreadSrcExpr then
-                    let rec loopFieldsFromSpread flds fieldsFromSpread =
+                    let rec collectFieldsFromSpread flds fieldsFromSpread =
                         match fieldsFromSpread with
-                        | [] -> loopFieldsAndSpreads flds tpenv fieldsAndSpreads
+                        | [] -> collectFields flds tpenv fieldsAndSpreads
 
                         | Item.RecdField fieldInfo :: fieldsFromSpread ->
                             let fieldExpr = mkRecdFieldGetViaExprAddr (spreadSrcExpr, fieldInfo.RecdFieldRef, fieldInfo.TypeInst, m)
                             let fieldId = fieldInfo.RecdFieldRef.RecdField.Id
                             let ty = fieldInfo.FieldType
-                            loopFieldsFromSpread ((([], fieldId), Some (SynExprOrSpreadValue.SpreadValue (ty, fieldExpr))) :: flds) fieldsFromSpread
+                            collectFieldsFromSpread ((([], fieldId), Some (SynExprOrSpreadValue.SpreadValue (ty, fieldExpr))) :: flds) fieldsFromSpread
 
                         | Item.AnonRecdField (anonInfo, tys, fieldIndex, _) :: fieldsFromSpread ->
                             let fieldExpr = mkAnonRecdFieldGet g (anonInfo, spreadSrcExpr, tys, fieldIndex, m)
                             let fieldId = anonInfo.SortedIds[fieldIndex]
                             let ty = tys[fieldIndex]
-                            loopFieldsFromSpread ((([], fieldId), Some (SynExprOrSpreadValue.SpreadValue (ty, fieldExpr))) :: flds) fieldsFromSpread
+                            collectFieldsFromSpread ((([], fieldId), Some (SynExprOrSpreadValue.SpreadValue (ty, fieldExpr))) :: flds) fieldsFromSpread
 
-                        | _ :: fieldsFromSpread -> loopFieldsFromSpread flds fieldsFromSpread
+                        | _ :: fieldsFromSpread -> collectFieldsFromSpread flds fieldsFromSpread
 
-                    loopFieldsFromSpread flds (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false)
+                    let recordFieldsFromSpread = ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad tyOfSpreadSrcExpr false
+                    collectFieldsFromSpread flds recordFieldsFromSpread
                 else
-                    loopFieldsAndSpreads flds tpenv fieldsAndSpreads (* TODO. *)
+                    // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                    // TODO: Until then, warn that only records are supported?
+                    collectFields flds tpenv fieldsAndSpreads
 
-        loopFieldsAndSpreads [] tpenv unsortedFieldIdsAndSynExprsGiven
+        let unsortedFieldIdsAndSynExprsGiven, tpenv = collectFields [] tpenv unsortedFieldIdsAndSynExprsGiven
+        GroupUpdatesToNestedFields unsortedFieldIdsAndSynExprsGiven, tpenv
 
     let unsortedFieldSynExprsGiven = unsortedFieldIdsAndSynExprsGiven |> List.choose snd
 

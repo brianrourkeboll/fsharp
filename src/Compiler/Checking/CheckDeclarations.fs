@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All Rights Reserved. See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation. All Rights Reserved. See License.txt in the project root for license information.
 
 module internal FSharp.Compiler.CheckDeclarations
 
@@ -397,6 +397,65 @@ let CheckDuplicates (idf: _ -> Ident) k elems =
             if j > i && id1.idText = id2.idText then 
                 errorR (Duplicate(k, id1.idText, id2.idRange))))
     elems
+
+///// A record field ID that is either from
+///// an explicit field declaration or from a spread type.
+//[<RequireQualifiedAccess; NoEquality; NoComparison>]
+//type private ExplicitOrSpread =
+//    /// A record field ID from an explicit field declaration:
+//    /// type R = { A : int }
+//    | Explicit of Ident
+
+//    /// A record field ID derived from a spread:
+//    /// type R1 = { A : int }
+//    /// type R2 = { ...R1 } // R2.A
+//    | Spread of Ident
+
+/// A record field ID that is either from
+/// an explicit field declaration or from a spread type.
+[<NoEquality; NoComparison>]
+type private ExplicitOrSpreadField =
+    /// A record field from an explicit field declaration:
+    /// type R = { A : int }
+    | ExplicitField of RecdField
+
+    /// A record field derived from a spread:
+    /// type R1 = { A : int }
+    /// type R2 = { ...R1 } // R2.A
+    | SpreadField of RecdField
+
+///// Emits errors or warnings for duplicate record field IDs in a record type definition.
+//let private checkDuplicateExplicitOrSpreads ids =
+//    ids |> List.iteri (fun i id1 ->
+//        ids |> List.iteri (fun j id2 ->
+//            if j > i then
+//                match id1, id2 with
+//                // Explicit duplicate fields are not allowed.
+//                // type R = { A : int; A : string }
+//                | Explicit id1, Explicit id2 ->
+//                    if id1.idText = id2.idText then
+//                        errorR (Duplicate("field", id1.idText, id2.idRange))
+
+//                // We warn on shadowing from spreads.
+//                // type R1 = { A : int }
+//                // type R2 = { A : string; ...R1 }
+//                | Explicit id1, Spread id2 ->
+//                    if id1.idText = id2.idText then
+//                        // TODO: Dedicated warning?
+//                        // Field 'A: int' from spread type 'R1' shadows the explicitly declared field 'A: string` with the same name.
+//                        warning (Duplicate("field", id1.idText, id2.idRange))
+
+//                // We warn on shadowing from spreads.
+//                // type R1 = { A : int }
+//                // type R2 = { A : string }
+//                // type R3 = { ...R1; ...R2 }
+//                | Spread id1, Spread id2 ->
+//                    if id1.idText = id2.idText then
+//                        // TODO: Dedicated warning?
+//                        // Field 'A: int' from spread type 'R2' shadows the field 'A: string` from spread type 'R1' with the same name.
+//                        warning (Duplicate("field", id1.idText, id2.idRange))
+
+//                | _ -> ()))
 
 let private CheckDuplicatesArgNames (synVal: SynValSig) m =
     let argNames = synVal.SynInfo.ArgNames |> List.duplicates
@@ -3394,19 +3453,6 @@ module EstablishTypeDefinitionCores =
               
            with RecoverableException exn -> errorRecovery exn m))
 
-    /// A record field ID that is either from
-    /// an explicit field declaration or from a spread type.
-    [<NoEquality; NoComparison>]
-    type private RecordFieldId =
-        /// A record field ID from an explicit field declaration:
-        /// type R = { A : int }
-        | ExplicitField of Ident
-
-        /// A record field ID derived from a spread:
-        /// type R1 = { A : int }
-        /// type R2 = { ...R1 } // R2.A
-        | SpreadField of Ident
-
     /// Establish the fields, dispatch slots and union cases of a type
     let private TcTyconDefnCore_Phase1G_EstablishRepresentation (cenv: cenv) envinner tpenv inSig (MutRecDefnsPhase1DataForTycon(_, synTyconRepr, _, _, _, _)) (tycon: Tycon) (attrs: Attribs) =
         let g = cenv.g
@@ -3607,77 +3653,396 @@ module EstablishTypeDefinitionCores =
                     noAllowNullLiteralAttributeCheck()
                     structLayoutAttributeCheck true  // these are allowed for records
 
-                    let recdFields, ids, _tpenv =
-                        let rec tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads =
-                            match fieldsAndSpreads with
-                            | [] -> List.rev fields, List.rev ids, tpenv
+                    //let recdFields, ids, _tpenv =
+                    //    let rec tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads =
+                    //        match fieldsAndSpreads with
+                    //        | [] -> List.rev fields, List.rev ids, tpenv
 
-                            | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
-                                match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
-                                | Some recdField -> tcFieldsAndSpreads (recdField :: fields) (ExplicitField recdField.Id :: ids) tpenv fieldsAndSpreads
-                                | None -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
+                    //        | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
+                    //            match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
+                    //            | Some recdField -> tcFieldsAndSpreads (recdField :: fields) (Explicit recdField.Id :: ids) tpenv fieldsAndSpreads
+                    //            | None -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
 
-                            | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
-                                let ty, tpenv = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.Use WarnOnIWSAM.Yes envinner tpenv ty
+                    //        | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
+                    //            let spreadSrcTy, tpenv = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
 
-                                let rec tcFieldsOfSpreadTy fields ids fieldsOfTy =
-                                    match fieldsOfTy with
-                                    | [] -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
-                                    | Item.RecdField fieldInfo :: fieldsOfTy when IsRecdFieldAccessible cenv.amap m ad fieldInfo.RecdFieldRef ->
-                                        // If this field is a duplicate, report the error using the range of the spread,
-                                        // not the range of its declaration site (which may not even be in the same assembly, etc.).
-                                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)
+                    //            if isRecdTy g spreadSrcTy || isAnonRecdTy g spreadSrcTy then
+                    //                let rec tcFieldsOfSpreadTy fields ids fieldsOfTy =
+                    //                    match fieldsOfTy with
+                    //                    | [] -> tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
 
-                                        let recdField =
-                                            match tryDestTyparTy g fieldInfo.RecdField.FormalType with
-                                            | ValueNone -> fieldInfo.RecdField
-                                            | ValueSome typar ->
-                                                let freshenedTypar =
-                                                    let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
-                                                    let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
-                                                    Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.No, typar.Attribs, false, false) 
+                    //                    | Item.RecdField fieldInfo :: fieldsOfTy ->
+                    //                        // If this field is a duplicate, report the warning using the range of the spread,
+                    //                        // not the range of the field's declaration site (whose source text may not even be accessible).
+                    //                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)
 
-                                                { fieldInfo.RecdField with rfield_type = mkTyparTy freshenedTypar }
+                    //                        let recdField =
+                    //                            //
+                    //                            // TODO: These really need to be done recursively...
+                    //                            //
+                    //                            //match tryDestTyparTy g fieldInfo.RecdField.FormalType with
+                    //                            //| ValueNone ->
+                    //                            //    //fieldInfo.RecdField
 
-                                        tcFieldsOfSpreadTy (recdField :: fields) (SpreadField syntheticId :: ids) fieldsOfTy
+                    //                            //    (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField
 
-                                    | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields ids fieldsOfTy
+                    //                            //    //let ty =
+                    //                            //    //    let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.WillBeRigid fieldInfo.TyconRef false (tycon.Typars m)
+                    //                            //    //    objTy
 
-                                tcFieldsOfSpreadTy fields ids (ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad ty false)
+                    //                            //    //{ fieldInfo.RecdFieldRef.RecdField with rfield_type = ty }
 
-                        tcFieldsAndSpreads [] [] tpenv fieldsAndSpreads
+                    //                            //| ValueSome typar ->
+                    //                            //    // If the field is generic, we need a freshened typar.
+                    //                            //    let freshenedTypar =
+                    //                            //        let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
+                    //                            //        let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
+                    //                            //        Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.Yes, typar.Attribs, false, false) 
 
-                    // This inherits its quadratic behavior from CheckDuplicates, which see.
-                    ids |> List.iteri (fun i id1 ->
-                        ids |> List.iteri (fun j id2 ->
-                            if j > i then
-                                match id1, id2 with
-                                // Explicit duplicate fields are not allowed.
-                                // type R = { A : int; A : string }
-                                | ExplicitField id1, ExplicitField id2 ->
-                                    if id1.idText = id2.idText then
-                                        errorR (Duplicate("field", id1.idText, id2.idRange))
+                    //                            //    { fieldInfo.RecdFieldRef.RecdField with rfield_type = mkTyparTy freshenedTypar }
+                    //                            //    //(FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField
 
-                                // We warn on shadowing from spreads.
+                    //                            let tryTcrefAndTypeInstOfAppTy g ty =
+                    //                                let (|Typars|_|) typeInst =
+                    //                                    let typars = typeInst |> List.choose (fun ty -> tryDestTyparTy g ty |> Option.ofValueOption)
+                    //                                    if typars.Length = typeInst.Length then ValueSome typars
+                    //                                    else ValueNone
+
+                    //                                match stripTyEqns g ty with
+                    //                                | TType_app (tcref, Typars typars, _) -> ValueSome (tcref, typars)
+                    //                                | _ -> ValueNone
+
+                    //                            tryTcrefAndTypeInstOfAppTy g fieldInfo.RecdField.FormalType
+                    //                            |> ValueOption.map (fun (tcref, typars) ->
+                    //                                let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false typars
+                    //                                //{ fieldInfo.RecdFieldRef.RecdField with rfield_type = objTy }
+                    //                                { (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField with rfield_type = objTy }
+
+                    //                                //ignore tcref
+                    //                                //(FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField
+                    //                            )
+                    //                            |> ValueOption.orElseWith (fun () ->
+                    //                                //fieldInfo.RecdField
+                    //                                tryDestTyparTy g fieldInfo.RecdField.FormalType
+                    //                                |> ValueOption.map (fun typar ->
+                    //                                        // If the field is generic, we need a freshened typar.
+                    //                                    let freshenedTypar =
+                    //                                        let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
+                    //                                        let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
+                    //                                        Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.Yes, typar.Attribs, false, false) 
+
+                    //                                    { fieldInfo.RecdFieldRef.RecdField with rfield_type = mkTyparTy freshenedTypar }
+                    //                                )
+                    //                            )
+                    //                            |> ValueOption.defaultWith (fun () -> (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField)
+
+                    //                        tcFieldsOfSpreadTy (recdField :: fields) (Spread syntheticId :: ids) fieldsOfTy
+
+                    //                    | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields ids fieldsOfTy
+
+                    //                let tcref = tcrefOfAppTy g spreadSrcTy
+                    //                let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false (tycon.Typars m)
+                    //                let recordFieldsFromSpread = ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad objTy false
+                    //                tcFieldsOfSpreadTy fields ids recordFieldsFromSpread
+                    //            else
+                    //                // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                    //                // TODO: Until then, warn that only records are supported?
+                    //                tcFieldsAndSpreads fields ids tpenv fieldsAndSpreads
+
+                    //    tcFieldsAndSpreads [] [] tpenv fieldsAndSpreads
+
+                    //checkDuplicateExplicitOrSpreads ids
+
+                    //let recdFields, _tpenv =
+                    //    let mergeField i newField existingField =
+                    //        match existingField with
+                    //        | None -> Some ((i, newField), [])
+                    //        | Some (_, existingField as primary, dupes) ->
+
+                    //            //
+                    //            //
+                    //            // TODO: Handle multiple shadowings, etc.
+                    //            // TODO: keep swapping but
+                    //            //
+                    //            //
+
+                    //            match existingField, newField with
+                    //            // Explicit duplicate fields are not allowed.
+                    //            // type R = { A : int; A : string }
+                    //            | ExplicitField existingField, ExplicitField newField ->
+                    //                errorR (Duplicate ("field", existingField.Id.idText, newField.Id.idRange))
+                    //                Some (primary, (i, newField) :: dupes)
+
+                    //            // We warn on shadowing from spreads.
+                    //            // type R1 = { A : int }
+                    //            // type R2 = { A : string; ...R1 }
+                    //            | ExplicitField existingField, SpreadField newField ->
+                    //                // TODO: Dedicated warning?
+                    //                // Field 'A: int' from spread type 'R1' shadows the explicitly declared field 'A: string` with the same name.
+                    //                warning (Duplicate ("field", existingField.Id.idText, newField.Id.idRange))
+                    //                Some (primary, dupes)
+
+                    //            //// We warn on shadowing from spreads.
+                    //            //// type R1 = { A : int }
+                    //            //// type R2 = { A : string }
+                    //            //// type R3 = { ...R1; ...R2 }
+                    //            //| SpreadField existingField, SpreadField newField ->
+                    //            //    // TODO: Dedicated warning?
+                    //            //    // Field 'A: int' from spread type 'R2' shadows the field 'A: string` from spread type 'R1' with the same name.
+                    //            //    warning (Duplicate ("field", existingField.Id.idText, newField.Id.idRange))
+                    //            //    Some (primary, dupes)
+
+                    //            | SpreadField _, SpreadField _ ->
+                    //                Some ((i, newField), dupes)
+
+                    //            // Explicitly shadowing a spread field is allowed.
+                    //            | SpreadField _, ExplicitField _ ->
+                    //                Some ((i, newField), dupes)
+
+                    //    let rec tcFieldsAndSpreads fields i tpenv fieldsAndSpreads =
+                    //        match fieldsAndSpreads with
+                    //        | [] ->
+                    //            let fields =
+                    //                fields
+                    //                |> Map.toList
+                    //                |> List.collect (fun (_, ((i, (ExplicitField orig | SpreadField orig)), dupes)) -> (i, orig) :: dupes)
+                    //                |> List.sortBy (fun (i, _) -> i)
+                    //                |> List.map (fun (_, field) -> field)
+
+                    //            fields, tpenv
+
+                    //        | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
+                    //            match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
+                    //            | Some recdField ->
+                    //                let fields = fields |> Map.change recdField.Id.idText (mergeField i (ExplicitField recdField))
+                    //                tcFieldsAndSpreads fields (i + 1) tpenv fieldsAndSpreads
+
+                    //            | None -> tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                    //        | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
+                    //            let spreadSrcTy, tpenv = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
+
+                    //            if isRecdTy g spreadSrcTy || isAnonRecdTy g spreadSrcTy then
+                    //                let rec tcFieldsOfSpreadTy fields i fieldsOfTy =
+                    //                    match fieldsOfTy with
+                    //                    | [] -> tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                    //                    | Item.RecdField fieldInfo :: fieldsOfTy ->
+                    //                        // If this field is a duplicate, report the warning using the range of the spread,
+                    //                        // not the range of the field's declaration site (whose source text may not even be accessible).
+                    //                        let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)
+
+                    //                        let recdField =
+                    //                            let tryTcrefAndTypeInstOfAppTy g ty =
+                    //                                let (|Typars|_|) typeInst =
+                    //                                    let typars = typeInst |> List.choose (fun ty -> tryDestTyparTy g ty |> Option.ofValueOption)
+                    //                                    if typars.Length = typeInst.Length then ValueSome typars
+                    //                                    else ValueNone
+
+                    //                                match stripTyEqns g ty with
+                    //                                | TType_app (tcref, Typars typars, _) -> ValueSome (tcref, typars)
+                    //                                | _ -> ValueNone
+
+                    //                            tryTcrefAndTypeInstOfAppTy g fieldInfo.RecdField.FormalType
+                    //                            |> ValueOption.map (fun (tcref, typars) ->
+                    //                                let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false typars
+                    //                                //{ fieldInfo.RecdFieldRef.RecdField with rfield_type = objTy }
+                    //                                { (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField with
+                    //                                    rfield_type = objTy
+                    //                                    rfield_id = syntheticId }
+
+                    //                                //ignore tcref
+                    //                                //(FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField
+                    //                            )
+                    //                            |> ValueOption.orElseWith (fun () ->
+                    //                                //fieldInfo.RecdField
+                    //                                tryDestTyparTy g fieldInfo.RecdField.FormalType
+                    //                                |> ValueOption.map (fun typar ->
+                    //                                        // If the field is generic, we need a freshened typar.
+                    //                                    let freshenedTypar =
+                    //                                        let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
+                    //                                        let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
+                    //                                        Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.Yes, typar.Attribs, false, false) 
+
+                    //                                    { fieldInfo.RecdFieldRef.RecdField with
+                    //                                        rfield_type = mkTyparTy freshenedTypar
+                    //                                        rfield_id = syntheticId }
+                    //                                )
+                    //                            )
+                    //                            |> ValueOption.defaultWith (fun () ->
+                    //                                { (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField with rfield_id = syntheticId })
+
+                    //                        let fields = fields |> Map.change recdField.Id.idText (mergeField i (SpreadField recdField))
+                    //                        tcFieldsOfSpreadTy fields (i + 1) fieldsOfTy
+
+                    //                    | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields i fieldsOfTy
+
+                    //                let tcref = tcrefOfAppTy g spreadSrcTy
+                    //                let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false (tycon.Typars m)
+                    //                let recordFieldsFromSpread = ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad objTy false
+                    //                tcFieldsOfSpreadTy fields i recordFieldsFromSpread
+                    //            else
+                    //                // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                    //                // TODO: Until then, warn that only records are supported?
+                    //                tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                    //    tcFieldsAndSpreads Map.empty 0 tpenv fieldsAndSpreads
+
+                    let recdFields, _tpenv =
+                        let dedupe idText dupes =
+                            let rec loop diagnostics right left =
+                                // This could be memoized, but only absurdly pathological code would make it worthwhile.
+                                let (|LeftwardExplicit|_|) =
+                                    List.tryPick (function
+                                        | _, ExplicitField _ as explicitField -> Some explicitField
+                                        | _, SpreadField _ -> None)
+
+                                match right, left with
+                                | fields, [] ->
+                                    for diagnostic in diagnostics do
+                                        diagnostic ()
+
+                                    fields
+
+                                | [], rightmost :: dupes -> loop diagnostics [rightmost] dupes
+
+                                // Explicit duplicate with possible intervening spreads.
+                                //
+                                // type R1 = { A : int; A : string }
+                                //
+                                // type R1 = { A : float }
+                                // type R2 = { A : int; ...R1; A : string }
+                                //
+                                // Keep left.
+                                | (_, ExplicitField rightwardExplicit) :: _, (_, ExplicitField _ as leftwardExplicit) :: dupes ->
+                                    loop ((fun () -> errorR (Duplicate ("field", idText, rightwardExplicit.Id.idRange))) :: diagnostics) (leftwardExplicit :: right) dupes
+
+                                | (_, ExplicitField rightwardExplicit) :: _, _ :: (LeftwardExplicit _ & _ :: dupes) ->
+                                    loop ((fun () -> errorR (Duplicate ("field", idText, rightwardExplicit.Id.idRange))) :: diagnostics) right dupes
+
+                                // Spread field shadowing explicit field.
+                                //
                                 // type R1 = { A : int }
                                 // type R2 = { A : string; ...R1 }
-                                | ExplicitField id1, SpreadField id2 ->
-                                    if id1.idText = id2.idText then
-                                        // TODO: Dedicated warning?
-                                        // Field 'A: int' from spread type 'R1' shadows the explicitly declared field 'A: string` with the same name.
-                                        warning (Duplicate("field", id1.idText, id2.idRange))
+                                //
+                                // Keep right.
+                                | (_, SpreadField rightwardSpread) :: _, (_, ExplicitField _) :: dupes
+                                | (_, SpreadField rightwardSpread) :: _, LeftwardExplicit _ & _ :: dupes ->
+                                    loop ((fun () -> warning (Duplicate ("field", idText, rightwardSpread.Id.idRange))) :: diagnostics) right dupes
 
-                                // We warn on shadowing from spreads.
+                                // Explicit field shadowing spread field.
+                                //
+                                // type R1 = { A : int }
+                                // type R2 = { ...R1; A : string }
+                                //
+                                // Keep right.
+                                | (_, ExplicitField _) :: _, (_, SpreadField _) :: dupes ->
+                                    loop diagnostics right dupes
+
+                                // Spread field shadowing spread field.
+                                //
                                 // type R1 = { A : int }
                                 // type R2 = { A : string }
                                 // type R3 = { ...R1; ...R2 }
-                                | SpreadField id1, SpreadField id2 ->
-                                    if id1.idText = id2.idText then
-                                        // TODO: Dedicated warning?
-                                        // Field 'A: int' from spread type 'R2' shadows the field 'A: string` from spread type 'R1' with the same name.
-                                        warning (Duplicate("field", id1.idText, id2.idRange))
+                                //
+                                // Keep right.
+                                | (_, SpreadField _) :: _, (_, SpreadField _) :: dupes ->
+                                    loop diagnostics right dupes
 
-                                | _ -> ()))
+                            loop [] [] dupes
+
+                        let rec tcFieldsAndSpreads fields i tpenv fieldsAndSpreads =
+                            match fieldsAndSpreads with
+                            | [] ->
+                                let fields =
+                                    fields
+                                    |> Map.toList
+                                    |> List.collect (fun (idText, dupes) -> dedupe idText dupes)
+                                    |> List.sortBy (fun (i, _) -> i)
+                                    |> List.map (fun (_, (ExplicitField field | SpreadField field)) -> field)
+
+                                fields, tpenv
+
+                            | SynFieldOrSpread.SynField synField :: fieldsAndSpreads ->
+                                match TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv synField with
+                                | Some recdField ->
+                                    let fields = fields |> Map.change recdField.Id.idText (function
+                                        | None -> Some [i, ExplicitField recdField]
+                                        | Some dupes -> Some ((i, ExplicitField recdField) :: dupes))
+                                    tcFieldsAndSpreads fields (i + 1) tpenv fieldsAndSpreads
+
+                                | None -> tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                            | SynFieldOrSpread.SynSpread (SynTypeSpread (ty = ty; range = mTypeSpread)) :: fieldsAndSpreads ->
+                                let spreadSrcTy, tpenv = TcTypeAndRecover cenv NoNewTypars CheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes envinner tpenv ty
+
+                                if isRecdTy g spreadSrcTy || isAnonRecdTy g spreadSrcTy then
+                                    let rec tcFieldsOfSpreadTy fields i fieldsOfTy =
+                                        match fieldsOfTy with
+                                        | [] -> tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                                        | Item.RecdField fieldInfo :: fieldsOfTy ->
+                                            // If this field is a duplicate, report the warning using the range of the spread,
+                                            // not the range of the field's declaration site (whose source text may not even be accessible).
+                                            let syntheticId = ident (fieldInfo.RecdField.Id.idText, mTypeSpread)
+
+                                            let recdField =
+                                                let tryTcrefAndTypeInstOfAppTy g ty =
+                                                    let (|Typars|_|) typeInst =
+                                                        let typars = typeInst |> List.choose (fun ty -> tryDestTyparTy g ty |> Option.ofValueOption)
+                                                        if typars.Length = typeInst.Length then ValueSome typars
+                                                        else ValueNone
+
+                                                    match stripTyEqns g ty with
+                                                    | TType_app (tcref, Typars typars, _) -> ValueSome (tcref, typars)
+                                                    | _ -> ValueNone
+
+                                                tryTcrefAndTypeInstOfAppTy g fieldInfo.RecdField.FormalType
+                                                |> ValueOption.map (fun (tcref, typars) ->
+                                                    let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false typars
+                                                    //{ fieldInfo.RecdFieldRef.RecdField with rfield_type = objTy }
+                                                    { (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField with
+                                                        rfield_type = objTy
+                                                        rfield_id = syntheticId }
+
+                                                    //ignore tcref
+                                                    //(FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField
+                                                )
+                                                |> ValueOption.orElseWith (fun () ->
+                                                    //fieldInfo.RecdField
+                                                    tryDestTyparTy g fieldInfo.RecdField.FormalType
+                                                    |> ValueOption.map (fun typar ->
+                                                            // If the field is generic, we need a freshened typar.
+                                                        let freshenedTypar =
+                                                            let clearStaticReq = g.langVersion.SupportsFeature LanguageFeature.InterfacesWithAbstractStaticMembers
+                                                            let staticReq = if clearStaticReq then TyparStaticReq.None else typar.StaticReq
+                                                            Construct.NewTypar (typar.Kind, TyparRigidity.Flexible, SynTypar (typar.Id, staticReq, false), false, TyparDynamicReq.Yes, typar.Attribs, false, false) 
+
+                                                        { fieldInfo.RecdFieldRef.RecdField with
+                                                            rfield_type = mkTyparTy freshenedTypar
+                                                            rfield_id = syntheticId }
+                                                    )
+                                                )
+                                                |> ValueOption.defaultWith (fun () ->
+                                                    { (FreshenRecdFieldRef cenv.nameResolver m fieldInfo.RecdFieldRef).RecdField with rfield_id = syntheticId })
+
+                                            let fields = fields |> Map.change recdField.Id.idText (function
+                                                | None -> Some [i, SpreadField recdField]
+                                                | Some dupes -> Some ((i, SpreadField recdField) :: dupes))
+                                            tcFieldsOfSpreadTy fields (i + 1) fieldsOfTy
+
+                                        | _ :: fieldsOfTy -> tcFieldsOfSpreadTy fields i fieldsOfTy
+
+                                    let tcref = tcrefOfAppTy g spreadSrcTy
+                                    let _, _copyOfTyconTypars, _, objTy, _thisTy = FreshenObjectArgType cenv m TyparRigidity.Flexible tcref false (tycon.Typars m)
+                                    let recordFieldsFromSpread = ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad objTy false
+                                    tcFieldsOfSpreadTy fields i recordFieldsFromSpread
+                                else
+                                    // TODO: Support spreads from obj tys, other kinds of properties, etc.?
+                                    // TODO: Until then, warn that only records are supported?
+                                    tcFieldsAndSpreads fields i tpenv fieldsAndSpreads
+
+                        tcFieldsAndSpreads Map.empty 0 tpenv fieldsAndSpreads
 
                     writeFakeRecordFieldsToSink recdFields
                     CallEnvSink cenv.tcSink (mRepr, envinner.NameEnv, ad)

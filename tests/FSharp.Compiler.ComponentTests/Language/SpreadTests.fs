@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
 
 module Language.SpreadTests
 
@@ -7,8 +7,118 @@ open Xunit
 
 module TypeSpreads =
     module Records =
-        module RightmostWins = ()
-        module DuplicateFieldHandling = ()
+        module RightmostWins =
+            [<Fact>]
+            let ``Private into public compiles`` () =
+                FSharp
+                    """
+                    type private R1 = { A : int; B : string }
+                    type R2 = { ...R1 }
+                    """
+                |> typecheck
+                |> shouldSucceed
+
+        module DuplicateFieldHandling =
+            /// No overlap, spread ⊕ field.
+            [<Fact>]
+            let ``{...{A,B},C} = {A,B} ⊕ {C} = {A,B,C}`` () =
+                let src =
+                    """
+                    type R1 = { A : int; B : int }
+                    type R2 = { ...R1; C : int }
+
+                    let _ : R2 = { A = 1; B = 2; C = 3 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldSucceed
+
+            /// No overlap, field ⊕ spread.
+            [<Fact>]
+            let ``{A,...{B,C}} = {A} ⊕ {B,C} = {A,B,C}`` () =
+                let src =
+                    """
+                    type R1 = { B : int; C : int }
+                    type R2 = { A : int; ...R1 }
+
+                    let _ : R2 = { A = 1; B = 2; C = 3 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldSucceed
+
+            /// No overlap, spread ⊕ spread.
+            [<Fact>]
+            let ``{...{A,B},...{C,D}} = {A,B} ⊕ {C,D} = {A,B,C,D}`` () =
+                let src =
+                    """
+                    type R1 = { A : int; B : int }
+                    type R2 = { ...R1; C : int; D : int }
+
+                    let _ : R2 = { A = 1; B = 2; C = 3; D = 4 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldSucceed
+
+            /// Explicit duplicate field after spread ousts field from spread.
+            [<Fact>]
+            let ``{...{A₀,B},A₁} = {A₀,B} ⊕ {A₁} = {A₁,B,C}`` () =
+                let src =
+                    """
+                    type R1 = { A : int; B : int }
+                    type R2 = { ...R1; A : string }
+
+                    let _ : R2 = { A = "1"; B = 2 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldSucceed
+
+            /// Duplicate fields from spreads: rightmost wins, no warning.
+            [<Fact>]
+            let ``{...{A₀,B},...{A₁}} = {A₀,B} ⊕ {A₁} = {A₁,B,C}`` () =
+                let src =
+                    """
+                    type R1 = { A : int; B : int }
+                    type R2 = { A : string }
+                    type R3 = { ...R1; ...R2 }
+                    type R4 = { ...R2; ...R1 }
+
+                    let _ : R3 = { A = "1"; B = 2 }
+                    let _ : R4 = { A = 1; B = 2 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldSucceed
+
+            /// Field from spread after explicit field: rightmost wins with warning.
+            [<Fact>]
+            let ``{A₀,...{A₁,B}} = {A₀,} ⊕ {A₁,B} = {A₁_warn,B,C}`` () =
+                let src =
+                    """
+                    type R1 = { A : int; B : int }
+                    type R2 = { A : string; ...R1 }
+
+                    let _ : R2 = { A = 1; B = 2 }
+                    """
+
+                FSharp src
+                |> typecheck
+                |> shouldFail
+                |> withDiagnostics [
+                    Warning 37, Line 3, Col 45, Line 3, Col 50, "Duplicate definition of field 'A'"
+                ]
+
+            /// Explicit duplicate fields: not allowed.
+            [<Fact>]
+            let ``{A₀,A₁} = {A₀} ⊕ {A₁} = {A₁_error}`` () = ()
+
         module GenericTypeParameters = ()
 
         module Accessibility =
@@ -107,8 +217,7 @@ module TypeSpreads =
             |> typecheck
             |> shouldFail
             |> withDiagnostics [
-                Warning 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'A'"
-                Warning 37, Line 3, Col 41, Line 3, Col 46, "Duplicate definition of field 'B'"
+                Warning 37, Line 3, Col 32, Line 3, Col 33, "Duplicate definition of field 'A'"
                 Error 37, Line 3, Col 48, Line 3, Col 49, "Duplicate definition of field 'A'"
             ]
 
@@ -178,6 +287,17 @@ module TypeSpreads =
             |> shouldSucceed
 
         [<Fact>]
+        let ``'a → 'a list`` () =
+            FSharp """
+            type R1<'a> = { A : 'a }
+            type R2<'a> = { ...R1<'a list> }
+
+            let _ : R2<int> = { A = [3] }
+            """
+            |> typecheck
+            |> shouldSucceed
+
+        [<Fact>]
         let ``Generic record spreads, single type parameter, not in scope, not allowed`` () =
             FSharp """
             type R1<'a> = { A : 'a; B : string }
@@ -210,7 +330,12 @@ module TypeSpreads =
         let ``Generic record spread, measure attribute on source, measure on spread destination, OK`` () =
             FSharp """
             type R1<[<Measure>] 'a> = { A : int<'a> }
-            type R2<[<Measure>] 'a> = { ...R1<'a> }
+            type R2<[<Measure>] 'b> = { ...R1<'b> }
+
+            type [<Measure>] m
+
+            let _ : R1<m> = { A = 3<m> }
+            let _ : R2<m> = { A = 3<m> }
             """
             |> typecheck
             |> shouldSucceed
@@ -229,10 +354,27 @@ module TypeSpreads =
             |> withSingleDiagnostic (Error 1, Line 3, Col 32, Line 3, Col 38, "A type parameter is missing a constraint 'when 'a: comparison'")
 
         [<Fact>]
+        let ``Generic record spread, constraint on source, required on spread destination, error if not`` () =
+            FSharp """
+            type R1<'a when 'a : comparison> = { A : 'a list }
+            type R2<'a when 'a : comparison > = { ...R1<'a> }
+
+            let _ : R2<_> = { A = [obj ()] }
+            """
+            |> typecheck
+            |> shouldFail
+            |> withSingleDiagnostic (Error 1, Line 5, Col 21, Line 5, Col 28, "The type 'obj' does not support the 'comparison' constraint. For example, it does not support the 'System.IComparable' interface")
+
+        [<Fact>]
         let ``Generic record spread, constraint on source, constraint on spread destination, OK`` () =
             FSharp """
             type R1<'a when 'a : comparison> = { A : 'a }
             type R2<'a when 'a : comparison> = { ...R1<'a> }
+            type R3<'a when 'a : comparison> = { ...R1<'a list> }
+
+            let _ : R1<int> = { A = 3 }
+            let _ : R2<int> = { A = 3 }
+            let _ : R3<int list> = { A = [3] }
             """
             |> typecheck
             |> shouldSucceed
@@ -309,6 +451,25 @@ module ExpressionSpreads =
                     let r3 : R3 = { ...r1; C = 3.14 }
                     let r4 : R4 = { ...r2; D = 3.14 }
                     let r5 : R5 = { ...r1; ...r2; E = 3.14 }
+                    """
+                |> typecheck
+                |> shouldSucceed
+
+            [<Fact>]
+            let ``Can spread a record into a record, inferred`` () =
+                FSharp
+                    """
+                    type R1 = { A : int; B : string }
+                    type R2 = { X : int; Y : string }
+                    type R3 = { ...R1; C : float }
+                    type R4 = { ...R2; D : float }
+                    type R5 = { ...R1; ...R2; E : float }
+
+                    let r1 = { A = 3; B = "lol" }
+                    let r2 = { X = 4; Y = "ha" }
+                    let r3 = { ...r1; C = 3.14 }
+                    let r4 = { ...r2; D = 3.14 }
+                    let r5 = { ...r1; ...r2; E = 3.14 }
                     """
                 |> typecheck
                 |> shouldSucceed
