@@ -1,4 +1,4 @@
-﻿namespace EmittedIL
+namespace EmittedIL
 
 open FSharp.Test
 open FSharp.Test.Compiler
@@ -11,6 +11,7 @@ module SpreadExpressions =
         |> withEmbeddedPdb
         |> withEmbedAllSource
         |> ignoreWarnings
+        |> compile
         |> verifyILBaseline
 
     [<Theory; FileInlineData("TypeSpreads.fs", Realsig = BooleanOptions.True, Optimize = BooleanOptions.True)>]
