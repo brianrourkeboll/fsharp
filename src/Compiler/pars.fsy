@@ -5722,7 +5722,7 @@ recdExprCore:
       reportParseErrorAt mExpr (FSComp.SR.parsFieldBinding ())
       Some($1, (mExpr.EndRange, None)), [] }
 
-  | DOT_DOT_DOT appExpr recdExprBindings opt_seps_recd
+  | DOT_DOT_DOT appExpr recdExprBindings opt_seps_block
      { let mSpread = rhs parseState 1
        let without = None // TODO.
        let m = rhs2 parseState 1 2
