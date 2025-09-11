@@ -44,34 +44,24 @@ open FSharp.Compiler.TypedTreeOps
 let showAssertForUnexpectedException = ref true
 #endif
 
-/// This exception is an old-style way of reporting a diagnostic
 exception HashIncludeNotAllowedInNonScript of range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception HashReferenceNotAllowedInNonScript of range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception HashLoadedSourceHasIssues of informationals: exn list * warnings: exn list * errors: exn list * range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception HashLoadedScriptConsideredSource of range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception HashDirectiveNotAllowedInNonScript of range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception DeprecatedCommandLineOptionFull of string * range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception DeprecatedCommandLineOptionForHtmlDoc of string * range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception DeprecatedCommandLineOptionSuggestAlternative of string * string * range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception DeprecatedCommandLineOptionNoDescription of string * range
 
-/// This exception is an old-style way of reporting a diagnostic
 exception InternalCommandLineOption of string * range
 
 type Exception with
@@ -207,7 +197,9 @@ type Exception with
         | MSBuildReferenceResolutionError(_, _, m)
         | AssemblyNotResolved(_, m)
         | HashLoadedSourceHasIssues(_, _, _, m)
-        | HashLoadedScriptConsideredSource m -> Some m
+        | HashLoadedScriptConsideredSource m
+        | NoConstructorsAvailableForType(_, _, m) -> Some m
+
         // Strip TargetInvocationException wrappers
         | :? System.Reflection.TargetInvocationException as e when isNotNull e.InnerException -> (!!e.InnerException).DiagnosticRange
 #if !NO_TYPEPROVIDERS
@@ -336,6 +328,7 @@ type Exception with
         | PatternMatchCompilation.EnumMatchIncomplete _ -> 104
         | Failure _ -> 192
         | DefinitionsInSigAndImplNotCompatibleAbbreviationsDiffer _ -> 318
+        | NoConstructorsAvailableForType _ -> 1133
         | ArgumentsInSigAndImplMismatch _ -> 3218
 
         // Strip TargetInvocationException wrappers
@@ -615,6 +608,8 @@ module OldStyleMessages =
 
     let InvalidAttributeTargetForLanguageElement1E () = Message("InvalidAttributeTargetForLanguageElement1", "%s%s")
     let InvalidAttributeTargetForLanguageElement2E () = Message("InvalidAttributeTargetForLanguageElement2", "")
+
+    let NoConstructorsAvailableForTypeE () = Message("NoConstructorsAvailableForType", "%s")
 
 #if DEBUG
 let mutable showParserStackOnParseError = false
@@ -1139,8 +1134,7 @@ type Exception with
                 | Parser.TOKEN_COLON_QMARK -> SR.GetString("Parser.TOKEN.COLON.QMARK")
                 | Parser.TOKEN_INT32_DOT_DOT -> SR.GetString("Parser.TOKEN.INT32.DOT.DOT")
                 | Parser.TOKEN_DOT_DOT -> SR.GetString("Parser.TOKEN.DOT.DOT")
-                | Parser.TOKEN_DOT_DOT_HAT -> SR.GetString("Parser.TOKEN.DOT.DOT.HAT")
-                | Parser.TOKEN_DOT_DOT_DOT -> SR.GetString("Parser.TOKEN.DOT.DOT.DOT")
+                | Parser.TOKEN_DOT_DOT_HAT -> SR.GetString("Parser.TOKEN.DOT.DOT")
                 | Parser.TOKEN_QUOTE -> SR.GetString("Parser.TOKEN.QUOTE")
                 | Parser.TOKEN_STAR -> SR.GetString("Parser.TOKEN.STAR")
                 | Parser.TOKEN_HIGH_PRECEDENCE_TYAPP -> SR.GetString("Parser.TOKEN.HIGH.PRECEDENCE.TYAPP")
@@ -1946,6 +1940,9 @@ type Exception with
                 let allowedTargets = allowedTargets |> String.concat ", "
                 os.AppendString(InvalidAttributeTargetForLanguageElement1E().Format elementTargets allowedTargets)
 
+        | NoConstructorsAvailableForType(t, denv, _) ->
+            os.AppendString(NoConstructorsAvailableForTypeE().Format(NicePrint.minimalStringOfType denv t))
+
         // Strip TargetInvocationException wrappers
         | :? TargetInvocationException as e when isNotNull e.InnerException -> (!!e.InnerException).Output(os, suggestNames)
 
@@ -2064,6 +2061,7 @@ let FormatDiagnosticLocation (tcConfig: TcConfig) (m: Range) : FormattedDiagnost
             File = ""
         }
     else
+        let m = m.ApplyLineDirectives()
         let file = m.FileName
 
         let file =
@@ -2195,6 +2193,8 @@ let CollectFormattedDiagnostics (tcConfig: TcConfig, severity: FSharpDiagnosticS
                 | DiagnosticStyle.Rich ->
                     match diagnostic.Range with
                     | Some m ->
+                        let m = m.ApplyLineDirectives()
+
                         let content =
                             m.FileName
                             |> FileSystem.GetFullFilePathInDirectoryShim tcConfig.implicitIncludeDir
@@ -2280,6 +2280,7 @@ type PhasedDiagnostic with
         match diagnostic.Range with
         | None -> ()
         | Some m ->
+            let m = m.ApplyLineDirectives()
             let fileName = m.FileName
             let lineA = m.StartLine
             let lineB = m.EndLine
