@@ -240,3 +240,14 @@ module ``It should still show up as a keyword even if the type parameter is inva
 """
 
         verifyClassificationAtEndOfMarker (sourceText, marker, classificationType)
+
+    [<Theory>]
+    [<InlineData("(*1*)", ClassificationTypeNames.Punctuation)>]
+    member _.``type R2 = { ...R1; B : int }``(marker: string, classificationType: string) =
+        let sourceText =
+            """
+            type R1 = { A : int }
+            type R2 = { (*1*)...R1; B : int }
+            """
+
+        verifyClassificationAtEndOfMarker (sourceText, marker, classificationType)
