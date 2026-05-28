@@ -100,6 +100,7 @@ type LanguageFeature =
     | ImplicitDIMCoverage
     | PreprocessorElif
     | ExceptionFieldSerializationSupport
+    | RecordSpreads
 
 /// LanguageVersion management
 type LanguageVersion =

@@ -4355,3 +4355,8 @@ let IsApplicableMethApprox g amap m (minfo: MethInfo) availObjTy =
         | _ -> true
     else
         true
+
+let SolveTyparsEqualTypes' g (css:ConstraintSolverState) m (typars: TypeInst) (tys:TypeInst) =
+    let csenv = MakeConstraintSolverEnv ContextInfo.NoContext css m (DisplayEnv.Empty g)
+    SolveTyparsEqualTypes csenv 0 m NoTrace typars tys
+    |> CommitOperationResult
