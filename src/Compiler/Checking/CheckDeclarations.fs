@@ -2700,7 +2700,7 @@ module EstablishTypeDefinitionCores =
           | SynTypeDefnSimpleRepr.Record (_, fieldsAndSpreads, _) ->
               let tcField (SynField (fieldType = ty; range = m)) =
                   let tyR, _ = TcTypeAndRecover cenv NoNewTypars NoCheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes env tpenv ty
-                  (tyR, m), ignore
+                  (tyR, m), ignore, ignore
   
               let tcSpread (SynTypeSpread (ty = ty; range = m)) =
                   let spreadSrcTy, _ = TcTypeAndRecover cenv NoNewTypars NoCheckCxs ItemOccurrence.UseInType WarnOnIWSAM.Yes env tpenv ty
@@ -2709,11 +2709,11 @@ module EstablishTypeDefinitionCores =
                       spreadSrcTys.Add spreadSrcTy
                       ResolveRecordOrClassFieldsOfType cenv.nameResolver m ad spreadSrcTy false
                       |> List.choose (function
-                          | Item.RecdField field -> Some (field.RecdField.Id.idText, (field.FieldType, m), ignore)
+                          | Item.RecdField field -> Some (field.RecdField.Id.idText, (field.FieldType, m), ignore, ignore)
                           | _ -> None)
                   else
                       match tryDestAnonRecdTy g spreadSrcTy with
-                      | ValueSome (anonInfo, tys) -> tys |> List.mapi (fun i ty -> (anonInfo.SortedNames[i], (ty, m), ignore))
+                      | ValueSome (anonInfo, tys) -> tys |> List.mapi (fun i ty -> (anonInfo.SortedNames[i], (ty, m), ignore, ignore))
                       | ValueNone -> []
   
               // We must apply the spread shadowing logic here
@@ -3719,7 +3719,12 @@ module EstablishTypeDefinitionCores =
                             let tcField synField =
                                 let field = TcRecdUnionAndEnumDeclarations.TcNamedFieldDecl cenv envinner innerParent false tpenv addFixup synField |> Option.get
                                 let errorAmbiguousShadowing () = if firstPass then errorR (Duplicate ("field", field.Id.idText, field.Id.idRange))
-                                field, errorAmbiguousShadowing
+                                let infoExplicitShadowing () =
+                                    if firstPass then
+                                        let fmtedSpreadField = NicePrint.stringOfRecdField envinner.DisplayEnv cenv.infoReader thisTyconRef field
+                                        informationalWarning (Error (FSComp.SR.tcRecordExplicitFieldShadowsSpreadField fmtedSpreadField, field.Id.idRange))
+
+                                field, errorAmbiguousShadowing, infoExplicitShadowing
 
                             let tcSpread (SynTypeSpread (ty = ty; range = m)) =
                                 let mTy = ty.Range
@@ -3777,7 +3782,12 @@ module EstablishTypeDefinitionCores =
                                                 let fmtedSpreadSrcTy = NicePrint.stringOfTy envinner.DisplayEnv spreadSrcTy
                                                 warning (Error (FSComp.SR.tcRecordTypeDefinitionSpreadFieldShadowsExplicitField (fmtedSpreadField, fmtedSpreadSrcTy), m))
 
-                                            Some (fieldInfo.RecdField.Id.idText, recdField, warnAmbiguousShadowing)
+                                            let infoSpreadShadowing () =
+                                                let fmtedSpreadField = NicePrint.stringOfRecdField envinner.DisplayEnv cenv.infoReader fieldInfo.TyconRef recdField
+                                                let fmtedSpreadSrcTy = NicePrint.stringOfTy envinner.DisplayEnv spreadSrcTy
+                                                informationalWarning (Error (FSComp.SR.tcRecordTypeDefinitionSpreadFieldShadowsSpreadField (fmtedSpreadField, fmtedSpreadSrcTy), m))
+
+                                            Some (fieldInfo.RecdField.Id.idText, recdField, warnAmbiguousShadowing, infoSpreadShadowing)
 
                                         | Item.AnonRecdField (anonInfo, tys, fieldIndex, _) ->
                                             let fieldId =
@@ -3803,7 +3813,13 @@ module EstablishTypeDefinitionCores =
                                                 let fmtedSpreadSrcTy = NicePrint.stringOfTy envinner.DisplayEnv spreadSrcTy
                                                 warning (Error (FSComp.SR.tcRecordTypeDefinitionSpreadFieldShadowsExplicitField (fmtedSpreadField, fmtedSpreadSrcTy), m))
 
-                                            Some (fieldId.idText, field, warnAmbiguousShadowing)
+                                            let infoSpreadShadowing () =
+                                                let typars = tryAppTy g ty |> ValueOption.map (snd >> List.choose (tryDestTyparTy g >> ValueOption.toOption)) |> ValueOption.defaultValue []
+                                                let fmtedSpreadField = LayoutRender.showL (NicePrint.prettyLayoutOfMemberSig envinner.DisplayEnv ([], fieldId.idText, typars, [], ty))
+                                                let fmtedSpreadSrcTy = NicePrint.stringOfTy envinner.DisplayEnv spreadSrcTy
+                                                informationalWarning (Error (FSComp.SR.tcRecordTypeDefinitionSpreadFieldShadowsSpreadField (fmtedSpreadField, fmtedSpreadSrcTy), m))
+
+                                            Some (fieldId.idText, field, warnAmbiguousShadowing, infoSpreadShadowing)
 
                                         | _ -> None)
                                 elif not firstPass then
